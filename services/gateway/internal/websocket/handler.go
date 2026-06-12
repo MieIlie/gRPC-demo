@@ -8,16 +8,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Allow all origins for dev environment
-		return true
-	},
-}
+func HandleConnection(manager *Manager, router *Router, allowedOrigins []string) http.HandlerFunc {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true // Allow non-browser requests
+			}
+			for _, o := range allowedOrigins {
+				if o == "*" || o == origin {
+					return true
+				}
+			}
+			return false
+		},
+	}
 
-func HandleConnection(manager *Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := middleware.GetUserID(r.Context())
 		if userID == "" {
@@ -31,7 +39,7 @@ func HandleConnection(manager *Manager) http.HandlerFunc {
 			return
 		}
 
-		client := NewClient(userID, conn, manager)
+		client := NewClient(userID, conn, manager, router)
 		manager.Register(client)
 
 		// Spawn read and write loops in background goroutines
@@ -42,3 +50,4 @@ func HandleConnection(manager *Manager) http.HandlerFunc {
 		client.Send <- []byte("Welcome to the Realtime Gateway Connection!")
 	}
 }
+

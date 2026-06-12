@@ -1,0 +1,48 @@
+<div class="chat-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <!-- User Profile Header -->
+        <div class="user-profile-header">
+            <div class="user-info">
+                <div class="avatar" id="current-user-avatar">U</div>
+                <div class="username" id="current-user-name">User</div>
+            </div>
+            <button class="create-room-btn" id="logout-btn" title="Logout" style="font-size: 1rem; color: var(--error);">Logout</button>
+        </div>
+
+        <!-- Rooms Panel -->
+        <div class="rooms-panel">
+            <div class="rooms-title-bar">
+                <span>Rooms</span>
+                <button class="create-room-btn" id="create-room-btn" title="Create Room">+</button>
+            </div>
+            <div id="rooms-list">
+                <!-- Rooms will be rendered here dynamically -->
+                <div class="room-item active">General Room</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Message Interface -->
+    <main class="main-chat">
+        <!-- Chat Header -->
+        <header class="chat-header">
+            <div class="chat-room-title" id="active-room-title">Select or Create a Room</div>
+            <button class="send-btn" id="start-call-btn" style="padding: 0.5rem 1rem; display: none;">Call</button>
+        </header>
+
+        <!-- Message Feed -->
+        <div class="message-feed" id="messages-container">
+            <!-- Messages will be rendered here -->
+            <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
+                No messages yet. Send a message to start conversing!
+            </div>
+        </div>
+
+        <!-- Input Box -->
+        <div class="chat-input-bar">
+            <input class="chat-input" type="text" id="chat-message-input" placeholder="Type a message..." disabled>
+            <button class="send-btn" id="chat-send-btn" disabled>Send</button>
+        </div>
+    </main>
+</div>

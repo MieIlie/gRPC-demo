@@ -16,6 +16,12 @@ const (
 	UsernameKey contextKey = "username"
 )
 
+type Claims struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	jwt.RegisteredClaims
+}
+
 func JWTAuth(secret string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +46,9 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Parse and validate
-			token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			// Parse and validate with custom Claims
+			claims := &Claims{}
+			token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 				}
@@ -53,24 +60,14 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, ok := token.Claims.(jwt.MapClaims)
-			if !ok {
-				http.Error(w, "Unauthorized: invalid claims", http.StatusUnauthorized)
-				return
-			}
-
-			// Extract user details
-			userID, _ := claims["user_id"].(string)
-			username, _ := claims["username"].(string)
-
-			if userID == "" {
+			if claims.UserID == "" {
 				http.Error(w, "Unauthorized: missing user_id claim", http.StatusUnauthorized)
 				return
 			}
 
 			// Inject into context
-			ctx := context.WithValue(r.Context(), UserIDKey, userID)
-			ctx = context.WithValue(ctx, UsernameKey, username)
+			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+			ctx = context.WithValue(ctx, UsernameKey, claims.Username)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -87,3 +84,4 @@ func GetUsername(ctx context.Context) string {
 	val, _ := ctx.Value(UsernameKey).(string)
 	return val
 }
+

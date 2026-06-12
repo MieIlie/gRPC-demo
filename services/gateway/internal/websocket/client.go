@@ -18,21 +18,23 @@ type Client struct {
 	ID      string
 	Conn    *websocket.Conn
 	Manager *Manager
+	Router  *Router
 	Send    chan []byte
 }
 
-func NewClient(id string, conn *websocket.Conn, manager *Manager) *Client {
+func NewClient(id string, conn *websocket.Conn, manager *Manager, router *Router) *Client {
 	return &Client{
 		ID:      id,
 		Conn:    conn,
 		Manager: manager,
+		Router:  router,
 		Send:    make(chan []byte, 256),
 	}
 }
 
 func (c *Client) ReadPump() {
 	defer func() {
-		c.Manager.Unregister(c.ID)
+		c.Manager.Unregister(c)
 		c.Conn.Close()
 	}()
 
@@ -54,8 +56,8 @@ func (c *Client) ReadPump() {
 
 		logger.Info("WebSocket client %s sent message: %s", c.ID, string(message))
 		
-		// Phase 2 placeholder: echo the message back to the client
-		c.Send <- append([]byte("Echo: "), message...)
+		// Route message using the WebSocket Router
+		c.Router.RouteMessage(c, message)
 	}
 }
 
@@ -100,3 +102,4 @@ func (c *Client) WritePump() {
 		}
 	}
 }
+

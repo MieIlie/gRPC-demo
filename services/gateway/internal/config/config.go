@@ -2,11 +2,14 @@ package config
 
 import (
 	"os"
+	"strings"
 )
 
 type Config struct {
-	Port      string
-	JWTSecret string
+	Port            string
+	JWTSecret       string
+	AllowedOrigins  []string
+	AuthServiceAddr string
 }
 
 func Load() *Config {
@@ -22,8 +25,27 @@ func Load() *Config {
 		secret = "supersecret"
 	}
 
+	originsStr := os.Getenv("ALLOWED_ORIGINS")
+	var allowedOrigins []string
+	if originsStr != "" {
+		allowedOrigins = strings.Split(originsStr, ",")
+		for i, origin := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(origin)
+		}
+	} else {
+		allowedOrigins = []string{"*"}
+	}
+
+	authServiceAddr := os.Getenv("AUTH_SERVICE_ADDR")
+	if authServiceAddr == "" {
+		authServiceAddr = "auth-service:50051"
+	}
+
 	return &Config{
-		Port:      port,
-		JWTSecret: secret,
+		Port:            port,
+		JWTSecret:       secret,
+		AllowedOrigins:  allowedOrigins,
+		AuthServiceAddr: authServiceAddr,
 	}
 }
+

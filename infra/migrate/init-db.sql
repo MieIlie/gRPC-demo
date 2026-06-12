@@ -102,3 +102,10 @@ ON call_sessions(room_id);
 
 CREATE INDEX idx_call_sessions_created_at
 ON call_sessions(created_at);
+
+-- Seed test users (password is 'password123')
+INSERT INTO users (id, username, password_hash, display_name) VALUES
+('11111111-1111-1111-1111-111111111111', 'alice', '$2a$10$6fxT3J2ic0JFeCES6HPaze67je.5CgRLOZ2rWye4k9Cb43Mct4koK', 'Alice Henderson'),
+('22222222-2222-2222-2222-222222222222', 'bob', '$2a$10$6fxT3J2ic0JFeCES6HPaze67je.5CgRLOZ2rWye4k9Cb43Mct4koK', 'Bob Vance')
+ON CONFLICT (username) DO NOTHING;
+

@@ -7,12 +7,12 @@ import (
 
 type Manager struct {
 	mu      sync.RWMutex
-	clients map[string]*Client
+	clients map[string]map[*Client]bool
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		clients: make(map[string]*Client),
+		clients: make(map[string]map[*Client]bool),
 	}
 }
 
@@ -20,52 +20,67 @@ func (m *Manager) Register(c *Client) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Terminate existing connection if user re-connects
-	if old, exists := m.clients[c.ID]; exists {
-		logger.Info("Closing duplicate WebSocket connection for user: %s", c.ID)
-		_ = old.Conn.Close()
+	if _, exists := m.clients[c.ID]; !exists {
+		m.clients[c.ID] = make(map[*Client]bool)
 	}
-
-	m.clients[c.ID] = c
-	logger.Info("User %s registered. Total online: %d", c.ID, len(m.clients))
+	m.clients[c.ID][c] = true
+	logger.Info("User %s registered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
 }
 
-func (m *Manager) Unregister(userID string) {
+func (m *Manager) Unregister(c *Client) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.clients[userID]; exists {
-		delete(m.clients, userID)
-		logger.Info("User %s unregistered. Total online: %d", userID, len(m.clients))
+	if conns, exists := m.clients[c.ID]; exists {
+		delete(conns, c)
+		if len(conns) == 0 {
+			delete(m.clients, c.ID)
+		}
+		logger.Info("User %s unregistered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
 	}
 }
 
 func (m *Manager) SendMessage(userID string, message []byte) bool {
 	m.mu.RLock()
-	client, exists := m.clients[userID]
+	conns, exists := m.clients[userID]
+	if !exists || len(conns) == 0 {
+		m.mu.RUnlock()
+		return false
+	}
+
+	clients := make([]*Client, 0, len(conns))
+	for client := range conns {
+		clients = append(clients, client)
+	}
 	m.mu.RUnlock()
 
-	if exists {
+	success := false
+	for _, client := range clients {
 		select {
 		case client.Send <- message:
-			return true
+			success = true
 		default:
-			logger.Error("Client send buffer full for user %s, dropping message", userID)
-			return false
+			logger.Error("Client send buffer full for user %s (conn: %p), dropping message", userID, client.Conn)
 		}
 	}
-	return false
+	return success
 }
 
 func (m *Manager) BroadcastMessage(message []byte) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	var clients []*Client
+	for _, conns := range m.clients {
+		for client := range conns {
+			clients = append(clients, client)
+		}
+	}
+	m.mu.RUnlock()
 
-	for userID, client := range m.clients {
+	for _, client := range clients {
 		select {
 		case client.Send <- message:
 		default:
-			logger.Error("Client send buffer full for user %s during broadcast", userID)
+			logger.Error("Client send buffer full for user %s (conn: %p) during broadcast", client.ID, client.Conn)
 		}
 	}
 }
@@ -80,3 +95,4 @@ func (m *Manager) GetOnlineUsers() []string {
 	}
 	return users
 }
+
