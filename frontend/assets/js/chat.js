@@ -2,11 +2,20 @@ import { store } from '../../state/store.js';
 import { getElement } from './ui.js';
 import { logout } from './auth.js';
 import { sendWSMessage, registerSocketListener } from './socket.js';
+import { clearTraces } from './traces.js';
 
 export function initChat() {
     setupChatDOM();
     setupChatListeners();
     registerSocketHandlers();
+
+    // Force select General Room on init to direct user straight to a room
+    const defaultRoom = { id: 'a3333333-3333-3333-3333-333333333333', name: 'General Room', type: 'group' };
+    store.setState({ activeRoom: defaultRoom });
+
+    // Load rooms list and messages in parallel
+    fetchRooms();
+    fetchRoomMessages(defaultRoom.id);
 }
 
 function setupChatDOM() {
@@ -23,16 +32,69 @@ function setupChatListeners() {
     const input = getElement('chat-message-input');
     const createRoomBtn = getElement('create-room-btn');
 
+    // Tab buttons and containers
+    const chatTabBtn = getElement('chat-tab-btn');
+    const monitorTabBtn = getElement('monitor-tab-btn');
+    const chatTabContent = getElement('chat-tab-content');
+    const monitorTabContent = getElement('monitor-tab-content');
+
+    if (chatTabBtn && monitorTabBtn) {
+        chatTabBtn.addEventListener('click', () => {
+            chatTabBtn.classList.add('active');
+            monitorTabBtn.classList.remove('active');
+            chatTabContent.style.display = 'flex';
+            monitorTabContent.style.display = 'none';
+        });
+
+        monitorTabBtn.addEventListener('click', () => {
+            monitorTabBtn.classList.add('active');
+            chatTabBtn.classList.remove('active');
+            chatTabContent.style.display = 'none';
+            monitorTabContent.style.display = 'flex';
+            // Refresh logs rendering on tab selection
+            renderTraces(store.traces);
+        });
+    }
+
+    const clearTracesBtn = getElement('clear-traces-btn');
+    if (clearTracesBtn) {
+        clearTracesBtn.addEventListener('click', () => {
+            clearTraces();
+        });
+    }
+
     logoutBtn.addEventListener('click', () => {
         logout();
     });
 
-    createRoomBtn.addEventListener('click', () => {
+    createRoomBtn.addEventListener('click', async () => {
         const name = prompt("Enter room name:");
-        if (name) {
-            const newRoom = { id: 'room-placeholder-id-' + Date.now(), name, type: 'group' };
-            store.setState({ rooms: [...store.rooms, newRoom] });
-            renderRooms();
+        if (!name) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/rooms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    room_type: 1, // GROUP
+                    room_name: name,
+                    member_ids: [] // Creator is auto-added
+                })
+            });
+
+            if (!res.ok) {
+                throw new Error(`Failed to create room: ${res.statusText}`);
+            }
+
+            // Re-fetch all rooms to get the updated list from DB
+            await fetchRooms();
+        } catch (err) {
+            console.error("Error creating room:", err);
+            alert("Error creating room: " + err.message);
         }
     });
 
@@ -46,15 +108,101 @@ function setupChatListeners() {
         }
     });
 
-    store.subscribe((state) => {
+    let lastTracesLength = 0;
+
+    const unsubscribe = store.subscribe((state) => {
+        const activeRoomTitle = getElement('active-room-title');
+        if (!activeRoomTitle) {
+            unsubscribe();
+            return;
+        }
+
         if (state.activeRoom) {
             input.disabled = false;
             sendBtn.disabled = false;
-            getElement('active-room-title').textContent = state.activeRoom.name;
+            activeRoomTitle.textContent = state.activeRoom.name;
         } else {
             input.disabled = true;
             sendBtn.disabled = true;
-            getElement('active-room-title').textContent = "Select or Create a Room";
+            activeRoomTitle.textContent = "Select or Create a Room";
+        }
+
+        // Live connection indicator updates (sidebar and nodes)
+        const gatewayStatusEl = getElement('sidebar-gateway-status');
+        if (gatewayStatusEl) {
+            if (state.backendStatus === 'ONLINE') {
+                gatewayStatusEl.className = 'sidebar-status-value online';
+                gatewayStatusEl.innerHTML = `<span class="status-dot"></span>Online (${state.backendLatency || 0}ms)`;
+                
+                const gwNodeStatus = getElement('status-gateway');
+                if (gwNodeStatus) {
+                    gwNodeStatus.textContent = `Online (${state.backendLatency || 0}ms)`;
+                    gwNodeStatus.style.color = 'var(--success)';
+                }
+            } else if (state.backendStatus === 'CHECKING') {
+                gatewayStatusEl.className = 'sidebar-status-value connecting';
+                gatewayStatusEl.innerHTML = `<span class="status-dot"></span>Checking...`;
+            } else {
+                gatewayStatusEl.className = 'sidebar-status-value offline';
+                gatewayStatusEl.innerHTML = `<span class="status-dot"></span>Offline`;
+                
+                const gwNodeStatus = getElement('status-gateway');
+                if (gwNodeStatus) {
+                    gwNodeStatus.textContent = `Offline`;
+                    gwNodeStatus.style.color = 'var(--error)';
+                }
+            }
+        }
+
+        const socketStatusEl = getElement('sidebar-websocket-status');
+        if (socketStatusEl) {
+            const clientWSNodeStatus = getElement('status-client-ws');
+            const connLineClientGW = getElement('conn-client-gateway');
+            
+            if (state.socketState === 'CONNECTED') {
+                socketStatusEl.className = 'sidebar-status-value online';
+                socketStatusEl.innerHTML = `<span class="status-dot"></span>Connected`;
+                
+                if (clientWSNodeStatus) {
+                    clientWSNodeStatus.textContent = 'WS: Connected';
+                    clientWSNodeStatus.classList.add('connected');
+                }
+                if (connLineClientGW) {
+                    connLineClientGW.style.borderColor = 'var(--secondary)';
+                }
+            } else if (state.socketState === 'CONNECTING') {
+                socketStatusEl.className = 'sidebar-status-value connecting';
+                socketStatusEl.innerHTML = `<span class="status-dot"></span>Connecting...`;
+                
+                if (clientWSNodeStatus) {
+                    clientWSNodeStatus.textContent = 'WS: Connecting';
+                    clientWSNodeStatus.classList.remove('connected');
+                }
+            } else {
+                socketStatusEl.className = 'sidebar-status-value offline';
+                socketStatusEl.innerHTML = `<span class="status-dot"></span>Disconnected`;
+                
+                if (clientWSNodeStatus) {
+                    clientWSNodeStatus.textContent = 'WS: Offline';
+                    clientWSNodeStatus.classList.remove('connected');
+                }
+                if (connLineClientGW) {
+                    connLineClientGW.style.borderColor = 'var(--border-light)';
+                }
+            }
+        }
+
+        // Trace updates and network graph flashes
+        if (state.traces.length !== lastTracesLength) {
+            if (state.traces.length > lastTracesLength && state.traces.length > 0) {
+                const latestTrace = state.traces[0];
+                flashNetworkLink(latestTrace.source, latestTrace.target);
+            }
+            lastTracesLength = state.traces.length;
+            
+            if (monitorTabContent && monitorTabContent.style.display !== 'none') {
+                renderTraces(state.traces);
+            }
         }
     });
 
@@ -67,7 +215,8 @@ function renderRooms() {
     listEl.innerHTML = '';
 
     const defaultRoom = { id: 'a3333333-3333-3333-3333-333333333333', name: 'General Room', type: 'group' };
-    const allRooms = [defaultRoom, ...store.rooms];
+    const hasGeneralRoom = (store.rooms || []).some(r => r.id === defaultRoom.id);
+    const allRooms = hasGeneralRoom ? store.rooms : [defaultRoom, ...store.rooms];
 
     allRooms.forEach(room => {
         const item = document.createElement('div');
@@ -79,17 +228,111 @@ function renderRooms() {
         item.addEventListener('click', () => {
             store.setState({ activeRoom: room });
             renderRooms();
-            const container = getElement('messages-container');
-            if (container) {
-                container.innerHTML = `
-                    <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
-                        Connected to ${room.name}. Send a message!
-                    </div>
-                `;
-            }
+            fetchRoomMessages(room.id);
         });
         listEl.appendChild(item);
     });
+}
+
+async function fetchRooms() {
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/rooms', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to fetch rooms: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        const mappedRooms = (data.rooms || []).map(r => ({
+            id: r.id,
+            name: r.room_name || (r.room_type === 0 ? 'Direct Message' : 'Group Room'),
+            type: r.room_type === 0 ? 'direct' : 'group'
+        }));
+
+        store.setState({ rooms: mappedRooms });
+        renderRooms();
+    } catch (err) {
+        console.error("Error fetching rooms:", err);
+    }
+}
+
+async function fetchRoomMessages(roomId) {
+    const container = getElement('messages-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
+            Loading messages...
+        </div>
+    `;
+
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/rooms/${roomId}/messages?limit=50`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to fetch message history: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        
+        container.innerHTML = '';
+        
+        if (!data.messages || data.messages.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
+                    No messages yet. Send a message to start!
+                </div>
+            `;
+            return;
+        }
+
+        // Reversing list because backend queries order by created_at DESC (newest first).
+        const chronologicalMessages = [...data.messages].reverse();
+
+        chronologicalMessages.forEach(msg => {
+            const isOutgoing = msg.sender_id === store.currentUser.id;
+            const bubble = document.createElement('div');
+            bubble.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
+            
+            let timeStr = 'now';
+            if (msg.created_at) {
+                const date = new Date(msg.created_at);
+                if (!isNaN(date.getTime())) {
+                    timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+            }
+            
+            const senderName = isOutgoing ? 'You' : (msg.sender_id === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (msg.sender_id === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'User'));
+
+            bubble.innerHTML = `
+                <div>${msg.content}</div>
+                <div class="message-meta">
+                    <span>${senderName}</span>
+                    <span>${timeStr}</span>
+                </div>
+            `;
+            container.appendChild(bubble);
+        });
+
+        container.scrollTop = container.scrollHeight;
+    } catch (err) {
+        console.error("Error fetching message history:", err);
+        container.innerHTML = `
+            <div style="text-align: center; color: var(--error); margin-top: 2rem;">
+                Error loading message history.
+            </div>
+        `;
+    }
 }
 
 function sendMessage() {
@@ -130,4 +373,92 @@ function registerSocketHandlers() {
         container.appendChild(bubble);
         container.scrollTop = container.scrollHeight;
     });
+}
+
+function renderTraces(traces) {
+    const listEl = getElement('traces-list');
+    if (!listEl) return;
+
+    if (traces.length === 0) {
+        listEl.innerHTML = '<div class="trace-empty">Waiting for transactions... Perform actions (login, send message) to trigger traffic.</div>';
+        return;
+    }
+
+    listEl.innerHTML = '';
+    traces.forEach(trace => {
+        const item = document.createElement('div');
+        item.className = `trace-item status-${trace.status || 'success'}`;
+        
+        const timestamp = new Date(trace.timestamp).toLocaleTimeString();
+        const latencyStr = trace.duration_ms !== undefined && trace.duration_ms > 0 ? `${trace.duration_ms}ms` : '';
+        
+        item.innerHTML = `
+            <div class="trace-meta">
+                <span class="trace-time">${timestamp}</span>
+                <span class="trace-proto">${trace.protocol}</span>
+                <span class="trace-type">${trace.type}</span>
+                <span class="trace-latency">${latencyStr}</span>
+            </div>
+            <div class="trace-flow">
+                <span class="trace-node src">${trace.source}</span>
+                <span class="trace-arrow">➡️</span>
+                <span class="trace-node dest">${trace.target}</span>
+            </div>
+            <div class="trace-msg">${trace.message}</div>
+        `;
+        listEl.appendChild(item);
+    });
+}
+
+function flashNetworkLink(source, target) {
+    let connectorId = null;
+    let nodeSrc = null;
+    let nodeDest = null;
+    
+    const src = source.toLowerCase();
+    const dest = target.toLowerCase();
+    
+    if (src.includes('client') && dest.includes('gateway')) {
+        connectorId = 'conn-client-gateway';
+        nodeSrc = 'node-client';
+        nodeDest = 'node-gateway';
+    } else if (src.includes('gateway') && dest.includes('auth')) {
+        connectorId = 'conn-gateway-services';
+        nodeSrc = 'node-gateway';
+        nodeDest = 'node-auth';
+    } else if (src.includes('gateway') && dest.includes('client')) {
+        connectorId = 'conn-client-gateway';
+        nodeSrc = 'node-gateway';
+        nodeDest = 'node-client';
+    } else if (src.includes('gateway') && dest.includes('chat')) {
+        connectorId = 'conn-gateway-services';
+        nodeSrc = 'node-gateway';
+        nodeDest = 'node-chat';
+    } else if (src.includes('gateway') && dest.includes('call')) {
+        connectorId = 'conn-gateway-services';
+        nodeSrc = 'node-gateway';
+        nodeDest = 'node-call';
+    }
+    
+    if (connectorId) {
+        const connEl = getElement(connectorId);
+        if (connEl) {
+            connEl.classList.add('flash-active');
+            setTimeout(() => connEl.classList.remove('flash-active'), 800);
+        }
+    }
+    if (nodeSrc) {
+        const nodeEl = getElement(nodeSrc);
+        if (nodeEl) {
+            nodeEl.classList.add('pulse-active');
+            setTimeout(() => nodeEl.classList.remove('pulse-active'), 800);
+        }
+    }
+    if (nodeDest) {
+        const nodeEl = getElement(nodeDest);
+        if (nodeEl) {
+            nodeEl.classList.add('pulse-active');
+            setTimeout(() => nodeEl.classList.remove('pulse-active'), 800);
+        }
+    }
 }

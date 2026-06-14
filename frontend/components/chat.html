@@ -10,6 +10,22 @@
             <button class="create-room-btn" id="logout-btn" title="Logout" style="font-size: 1rem; color: var(--error);">Logout</button>
         </div>
 
+        <!-- Connection and Websocket Diagnostics Widget -->
+        <div class="sidebar-status">
+            <div class="sidebar-status-row">
+                <span>Gateway Server</span>
+                <span class="sidebar-status-value offline" id="sidebar-gateway-status">
+                    <span class="status-dot"></span>Offline
+                </span>
+            </div>
+            <div class="sidebar-status-row">
+                <span>WebSocket Status</span>
+                <span class="sidebar-status-value offline" id="sidebar-websocket-status">
+                    <span class="status-dot"></span>Disconnected
+                </span>
+            </div>
+        </div>
+
         <!-- Rooms Panel -->
         <div class="rooms-panel">
             <div class="rooms-title-bar">
@@ -23,26 +39,101 @@
         </div>
     </aside>
 
-    <!-- Main Message Interface -->
+    <!-- Main Message & Service Monitor Interface -->
     <main class="main-chat">
         <!-- Chat Header -->
         <header class="chat-header">
-            <div class="chat-room-title" id="active-room-title">Select or Create a Room</div>
+            <div class="chat-header-left">
+                <div class="chat-room-title" id="active-room-title">Select or Create a Room</div>
+                <div class="chat-tabs">
+                    <button class="tab-btn active" id="chat-tab-btn">💬 Chat Feed</button>
+                    <button class="tab-btn" id="monitor-tab-btn">🖥️ Service Monitor</button>
+                </div>
+            </div>
             <button class="send-btn" id="start-call-btn" style="padding: 0.5rem 1rem; display: none;">Call</button>
         </header>
 
-        <!-- Message Feed -->
-        <div class="message-feed" id="messages-container">
-            <!-- Messages will be rendered here -->
-            <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
-                No messages yet. Send a message to start conversing!
+        <!-- Tab 1: Chat Feed Content -->
+        <div class="tab-content active" id="chat-tab-content">
+            <!-- Message Feed -->
+            <div class="message-feed" id="messages-container">
+                <!-- Messages will be rendered here -->
+                <div style="text-align: center; color: var(--text-muted); margin-top: 2rem;">
+                    No messages yet. Send a message to start conversing!
+                </div>
+            </div>
+
+            <!-- Input Box -->
+            <div class="chat-input-bar">
+                <input class="chat-input" type="text" id="chat-message-input" placeholder="Type a message..." disabled>
+                <button class="send-btn" id="chat-send-btn" disabled>Send</button>
             </div>
         </div>
 
-        <!-- Input Box -->
-        <div class="chat-input-bar">
-            <input class="chat-input" type="text" id="chat-message-input" placeholder="Type a message..." disabled>
-            <button class="send-btn" id="chat-send-btn" disabled>Send</button>
+        <!-- Tab 2: Service Monitor Content -->
+        <div class="tab-content" id="monitor-tab-content" style="display: none;">
+            <div class="monitor-container">
+                <!-- Interactive Architecture Network Visualizer -->
+                <div class="monitor-visualizer">
+                    <div class="node-network">
+                        <!-- Client Browser Node -->
+                        <div class="network-node" id="node-client">
+                            <div class="node-icon">📱</div>
+                            <div class="node-name">Client Browser</div>
+                            <div class="node-status" id="status-client-ws">WS: Offline</div>
+                        </div>
+                        
+                        <!-- Client to Gateway Connector -->
+                        <div class="network-connector" id="conn-client-gateway">
+                            <div class="connector-line"></div>
+                            <div class="connector-label">WebSockets / REST</div>
+                        </div>
+                        
+                        <!-- API Gateway Node -->
+                        <div class="network-node" id="node-gateway">
+                            <div class="node-icon">⚡</div>
+                            <div class="node-name">API Gateway</div>
+                            <div class="node-status" id="status-gateway">Port 8080</div>
+                        </div>
+                        
+                        <!-- Gateway to Internal Services Connector -->
+                        <div class="network-connector" id="conn-gateway-services">
+                            <div class="connector-line"></div>
+                            <div class="connector-label">gRPC</div>
+                        </div>
+                        
+                        <!-- Microservices Column -->
+                        <div class="services-subgroup">
+                            <div class="network-node" id="node-auth">
+                                <div class="node-icon">🔒</div>
+                                <div class="node-name">Auth Service</div>
+                                <div class="node-status" id="status-auth-node">Port 50051</div>
+                            </div>
+                            <div class="network-node stub" id="node-chat">
+                                <div class="node-icon">💬</div>
+                                <div class="node-name">Chat Service</div>
+                                <div class="node-status">Port 50052 (Stub)</div>
+                            </div>
+                            <div class="network-node stub" id="node-call">
+                                <div class="node-icon">📞</div>
+                                <div class="node-name">Call Service</div>
+                                <div class="node-status">Port 50053 (Stub)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trace Log Output Console -->
+                <div class="traces-console">
+                    <div class="traces-header">
+                        <h3>Real-time Inter-Service Traces</h3>
+                        <button class="btn btn-sm btn-clear" id="clear-traces-btn">Clear Logs</button>
+                    </div>
+                    <div class="traces-list-container" id="traces-list">
+                        <div class="trace-empty">Waiting for transactions... Perform actions (login, send message) to trigger traffic.</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 </div>

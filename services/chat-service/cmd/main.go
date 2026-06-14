@@ -1,29 +1,56 @@
 package main
 
 import (
+	"gen/chat"
 	"net"
+	"os"
+	"chat-service/internal/db"
+	"chat-service/internal/server"
 	"shared/logger"
+
+	"google.golang.org/grpc"
 )
 
 func main() {
 	logger.Info("Chat Service is starting...")
-	logger.Info("Listening on TCP port :50052")
-	listener, err := net.Listen("tcp", ":50052")
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://app:app@postgres:5432/distributed_chat?sslmode=disable"
+	}
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = ":50052"
+	} else if port[0] != ':' {
+		port = ":" + port
+	}
+
+	// Connect to database
+	database, err := db.Connect(dbURL)
+	if err != nil {
+		logger.Error("Failed to connect to database: %v", err)
+		os.Exit(1)
+	}
+	defer database.Close()
+
+	// Listen on TCP port
+	logger.Info("Listening on TCP port %s", port)
+	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		logger.Error("Error starting Chat TCP listener: %v", err)
-		return
+		os.Exit(1)
 	}
 	defer listener.Close()
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Error("Error accepting connection on Chat Service: %v", err)
-			continue
-		}
-		go func(c net.Conn) {
-			defer c.Close()
-			_, _ = c.Write([]byte("Chat Service connection established (placeholder)\n"))
-		}(conn)
+	// Initialize gRPC server
+	grpcServer := grpc.NewServer()
+	chatServer := server.NewChatServer(database)
+	chat.RegisterChatServiceServer(grpcServer, chatServer)
+
+	logger.Info("Chat Service gRPC server is ready.")
+	if err := grpcServer.Serve(listener); err != nil {
+		logger.Error("Chat Service gRPC server crashed: %v", err)
+		os.Exit(1)
 	}
 }

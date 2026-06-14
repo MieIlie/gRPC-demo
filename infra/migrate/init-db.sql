@@ -109,3 +109,30 @@ INSERT INTO users (id, username, password_hash, display_name) VALUES
 ('22222222-2222-2222-2222-222222222222', 'bob', '$2a$10$6fxT3J2ic0JFeCES6HPaze67je.5CgRLOZ2rWye4k9Cb43Mct4koK', 'Bob Vance')
 ON CONFLICT (username) DO NOTHING;
 
+-- Seed General Room
+INSERT INTO rooms (id, room_type, room_name, created_by) VALUES
+('a3333333-3333-3333-3333-333333333333', 'group', 'General Room', '11111111-1111-1111-1111-111111111111')
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Room Members for General Room
+INSERT INTO room_members (room_id, user_id) VALUES
+('a3333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111'),
+('a3333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222')
+ON CONFLICT (room_id, user_id) DO NOTHING;
+
+-- Trigger to auto-add new users to General Room
+CREATE OR REPLACE FUNCTION add_new_user_to_general_room()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO room_members (room_id, user_id)
+    VALUES ('a3333333-3333-3333-3333-333333333333', NEW.id)
+    ON CONFLICT (room_id, user_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_add_new_user_to_general_room
+AFTER INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION add_new_user_to_general_room();
+

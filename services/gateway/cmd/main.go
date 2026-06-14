@@ -27,8 +27,16 @@ func main() {
 	}
 	defer authClient.Close()
 
+	// Initialize gRPC Client to Chat Service
+	chatClient, err := grpc.NewChatClient(cfg.ChatServiceAddr)
+	if err != nil {
+		logger.Error("Failed to initialize Chat Service client: %v", err)
+		os.Exit(1)
+	}
+	defer chatClient.Close()
+
 	wsManager := websocket.NewManager()
-	router := server.NewRouter(cfg, wsManager, authClient)
+	router := server.NewRouter(cfg, wsManager, authClient, chatClient)
 
 	srv := &http.Server{
 		Addr:    cfg.Port,

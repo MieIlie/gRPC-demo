@@ -3,9 +3,34 @@ import { store } from '../../state/store.js';
 let ws = null;
 let reconnectTimeout = null;
 
+function isTokenExpired(token) {
+    if (!token) return true;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return true;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const payload = JSON.parse(jsonPayload);
+        if (!payload.exp) return false;
+        const now = Math.floor(Date.now() / 1000);
+        return now >= payload.exp;
+    } catch (e) {
+        return true;
+    }
+}
+
 export function initSocket() {
     const user = store.currentUser;
     if (!user || !user.token) return;
+
+    if (isTokenExpired(user.token)) {
+        console.warn("WebSocket initialization aborted: token is expired.");
+        import('./auth.js').then(auth => auth.logout());
+        return;
+    }
 
     if (ws) {
         ws.close();

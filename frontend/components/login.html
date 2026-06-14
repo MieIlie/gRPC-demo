@@ -1,5 +1,14 @@
 <div class="auth-card" id="auth-card-view">
     <h1 class="auth-title" id="auth-title-text">Welcome Back</h1>
+    
+    <!-- Connection Diagnostic Bar -->
+    <div class="conn-status-bar" id="login-conn-status">
+        <span>Server Status:</span>
+        <span class="conn-pill checking" id="login-conn-pill">
+            <span class="status-dot"></span>Checking
+        </span>
+    </div>
+
     <form id="auth-form">
         <div class="form-group" id="display-name-group" style="display: none;">
             <label class="form-label" for="display-name-input">Display Name</label>

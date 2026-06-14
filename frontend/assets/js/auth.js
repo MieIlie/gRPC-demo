@@ -3,10 +3,38 @@ import { loadView, getElement } from './ui.js';
 import { initSocket } from './socket.js';
 import { initChat } from './chat.js';
 
+function isTokenExpired(token) {
+    if (!token) return true;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return true;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const payload = JSON.parse(jsonPayload);
+        if (!payload.exp) return false;
+        const now = Math.floor(Date.now() / 1000);
+        return now >= payload.exp;
+    } catch (e) {
+        console.error("Failed to parse JWT:", e);
+        return true;
+    }
+}
+
 export function checkAuth() {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
     if (token && user) {
+        if (isTokenExpired(token)) {
+            console.warn("Session token expired. Clearing credentials and redirecting to login.");
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            store.setState({ currentUser: null, activeRoom: null });
+            navigateToLogin();
+            return false;
+        }
         const currentUser = JSON.parse(user);
         currentUser.token = token;
         store.setState({ currentUser });
@@ -31,6 +59,29 @@ function setupAuthListeners() {
     const displayNameGroup = getElement('display-name-group');
 
     let isRegisterMode = false;
+
+    // Subscribe to store connection state changes to update the diagnostic status badge and toggle submit button
+    const unsubscribe = store.subscribe((state) => {
+        const pill = getElement('login-conn-pill');
+        if (!pill) {
+            unsubscribe(); // Clean up listener when DOM is swapped
+            return;
+        }
+
+        if (state.backendStatus === 'ONLINE') {
+            pill.className = 'conn-pill online';
+            pill.innerHTML = `<span class="status-dot"></span>Online (${state.backendLatency || 0}ms)`;
+            submitBtn.disabled = false;
+        } else if (state.backendStatus === 'CHECKING') {
+            pill.className = 'conn-pill checking';
+            pill.innerHTML = `<span class="status-dot"></span>Checking`;
+            submitBtn.disabled = true;
+        } else {
+            pill.className = 'conn-pill offline';
+            pill.innerHTML = `<span class="status-dot"></span>Offline`;
+            submitBtn.disabled = true;
+        }
+    });
 
     switchLink.addEventListener('click', (e) => {
         e.preventDefault();

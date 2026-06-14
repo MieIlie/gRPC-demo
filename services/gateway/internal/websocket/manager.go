@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"gateway/internal/trace"
 	"shared/logger"
 	"sync"
 )
@@ -25,6 +26,15 @@ func (m *Manager) Register(c *Client) {
 	}
 	m.clients[c.ID][c] = true
 	logger.Info("User %s registered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
+
+	trace.GetTracker().Record(&trace.Event{
+		Source:   "Client (" + c.ID + ")",
+		Target:   "Gateway",
+		Protocol: "WebSocket",
+		Type:     "Connect",
+		Message:  "User connected and registered",
+		Status:   "success",
+	})
 }
 
 func (m *Manager) Unregister(c *Client) {
@@ -37,6 +47,15 @@ func (m *Manager) Unregister(c *Client) {
 			delete(m.clients, c.ID)
 		}
 		logger.Info("User %s unregistered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
+
+		trace.GetTracker().Record(&trace.Event{
+			Source:   "Client (" + c.ID + ")",
+			Target:   "Gateway",
+			Protocol: "WebSocket",
+			Type:     "Disconnect",
+			Message:  "User disconnected and unregistered",
+			Status:   "success",
+		})
 	}
 }
 

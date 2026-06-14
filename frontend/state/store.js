@@ -4,6 +4,9 @@ export const store = {
     socketState: 'DISCONNECTED', // 'CONNECTING', 'CONNECTED', 'DISCONNECTED'
     onlineUsers: [],
     rooms: [],
+    backendStatus: 'UNKNOWN',    // 'UNKNOWN', 'CHECKING', 'ONLINE', 'OFFLINE'
+    backendLatency: null,        // number in ms
+    traces: [],                  // list of inter-service trace events
 
     listeners: new Set(),
 
