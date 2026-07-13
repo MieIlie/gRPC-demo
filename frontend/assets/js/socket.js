@@ -64,8 +64,8 @@ export function initSocket() {
         }
     };
 
-    ws.onclose = () => {
-        console.log("WebSocket closed");
+    ws.onclose = (event) => {
+        console.log(`WebSocket closed: code=${event.code}, reason=${event.reason || 'none'}, wasClean=${event.wasClean}`);
         store.setState({ socketState: 'DISCONNECTED' });
         
         if (!reconnectTimeout && store.currentUser) {
