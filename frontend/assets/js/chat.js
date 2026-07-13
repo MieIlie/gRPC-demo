@@ -285,7 +285,8 @@ async function fetchRooms() {
         const mappedRooms = (data.rooms || []).map(r => {
             const roomType = r.room_type !== undefined ? r.room_type : r.roomType;
             const roomName = r.room_name !== undefined ? r.room_name : r.roomName;
-            const isDirect = (roomType === 0 || roomType === 'DIRECT' || roomType === 'RoomType_DIRECT' || String(roomType).toUpperCase() === 'DIRECT');
+            const isGroup = (roomType === 1 || roomType === 'GROUP' || String(roomType).toUpperCase() === 'GROUP');
+            const isDirect = !isGroup;
             return {
                 id: r.id,
                 name: roomName || (isDirect ? 'Direct Message' : 'Group Room'),
