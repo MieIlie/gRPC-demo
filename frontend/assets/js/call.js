@@ -125,8 +125,8 @@ async function getLocalStream() {
         try {
             return await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (audioErr) {
-            console.error("Microphone access failed too:", audioErr);
-            throw new Error("No camera or microphone device could be accessed.");
+            console.warn("Microphone access failed too, continuing in receive-only mode:", audioErr);
+            return null;
         }
     }
 }
@@ -140,7 +140,7 @@ async function startLoopbackCall() {
         
         const localVideo = getElement('local-video');
         if (localVideo) {
-            if (localStream.getVideoTracks().length > 0) {
+            if (localStream && localStream.getVideoTracks().length > 0) {
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
             } else {
@@ -188,7 +188,7 @@ async function acceptIncomingCall() {
         localStream = await getLocalStream();
         const localVideo = getElement('local-video');
         if (localVideo) {
-            if (localStream.getVideoTracks().length > 0) {
+            if (localStream && localStream.getVideoTracks().length > 0) {
                 localVideo.srcObject = localStream;
                 localVideo.style.display = 'block';
             } else {
@@ -355,7 +355,7 @@ function registerCallSocketHandlers() {
             localStream = await getLocalStream();
             const localVideo = getElement('local-video');
             if (localVideo) {
-                if (localStream.getVideoTracks().length > 0) {
+                if (localStream && localStream.getVideoTracks().length > 0) {
                     localVideo.srcObject = localStream;
                     localVideo.style.display = 'block';
                 } else {
