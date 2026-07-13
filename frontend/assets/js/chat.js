@@ -282,11 +282,16 @@ async function fetchRooms() {
         }
 
         const data = await res.json();
-        const mappedRooms = (data.rooms || []).map(r => ({
-            id: r.id,
-            name: r.room_name || (r.room_type === 0 ? 'Direct Message' : 'Group Room'),
-            type: r.room_type === 0 ? 'direct' : 'group'
-        }));
+        const mappedRooms = (data.rooms || []).map(r => {
+            const roomType = r.room_type !== undefined ? r.room_type : r.roomType;
+            const roomName = r.room_name !== undefined ? r.room_name : r.roomName;
+            const isDirect = (roomType === 0 || roomType === 'DIRECT' || roomType === 'RoomType_DIRECT' || String(roomType).toUpperCase() === 'DIRECT');
+            return {
+                id: r.id,
+                name: roomName || (isDirect ? 'Direct Message' : 'Group Room'),
+                type: isDirect ? 'direct' : 'group'
+            };
+        });
 
         store.setState({ rooms: mappedRooms });
         renderRooms();
@@ -462,7 +467,7 @@ async function startDirectMessage(targetUserId, displayName) {
         // Switch to the DM room
         const targetRoom = {
             id: room.id,
-            name: room.room_name || `DM with ${displayName}`,
+            name: room.room_name || room.roomName || `DM with ${displayName}`,
             type: 'direct'
         };
         store.setState({ activeRoom: targetRoom });
