@@ -3,7 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +53,7 @@ func (r *Router) registerRoutes() {
 	fs := http.FileServer(http.Dir("./frontend"))
 	r.mux.Handle("/assets/", fs)
 	r.mux.Handle("/components/", fs)
+	r.mux.Handle("/uploads/", fs)
 
 	// Public endpoint
 	r.mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -280,6 +284,50 @@ func (r *Router) registerRoutes() {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	protectedMux.HandleFunc("POST /api/upload", func(w http.ResponseWriter, req *http.Request) {
+		// Limit upload size to 50MB
+		err := req.ParseMultipartForm(50 << 20)
+		if err != nil {
+			http.Error(w, "File too large (max 50MB)", http.StatusBadRequest)
+			return
+		}
+
+		file, header, err := req.FormFile("file")
+		if err != nil {
+			http.Error(w, "Failed to get file from form data", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		uploadsDir := "./frontend/uploads"
+		if err := os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
+			http.Error(w, "Failed to create uploads directory", http.StatusInternalServerError)
+			return
+		}
+
+		filename := fmt.Sprintf("%d-%s", time.Now().UnixNano(), header.Filename)
+		filePath := filepath.Join(uploadsDir, filename)
+
+		out, err := os.Create(filePath)
+		if err != nil {
+			http.Error(w, "Failed to save file", http.StatusInternalServerError)
+			return
+		}
+		defer out.Close()
+
+		_, err = io.Copy(out, file)
+		if err != nil {
+			http.Error(w, "Failed to write file to disk", http.StatusInternalServerError)
+			return
+		}
+
+		fileURL := fmt.Sprintf("/uploads/%s", filename)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"url": fileURL,
+		})
 	})
 
 	protectedMux.HandleFunc("/ws", websocket.HandleConnection(r.wsManager, r.wsRouter, r.config.AllowedOrigins))

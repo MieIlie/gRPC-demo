@@ -116,6 +116,22 @@ function setupChatListeners() {
         sendTypingIndicator();
     });
 
+    const attachBtn = getElement('chat-attach-btn');
+    const fileInput = getElement('chat-video-upload');
+
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            await uploadVideoFile(file);
+            fileInput.value = '';
+        });
+    }
+
     let lastTracesLength = 0;
 
     const unsubscribe = store.subscribe((state) => {
@@ -126,9 +142,11 @@ function setupChatListeners() {
         }
 
         const startCallBtn = getElement('start-call-btn');
+        const attachBtn = getElement('chat-attach-btn');
         if (state.activeRoom) {
             input.disabled = false;
             sendBtn.disabled = false;
+            if (attachBtn) attachBtn.disabled = false;
             activeRoomTitle.textContent = state.activeRoom.name;
             if (startCallBtn) {
                 startCallBtn.style.display = 'block';
@@ -136,6 +154,7 @@ function setupChatListeners() {
         } else {
             input.disabled = true;
             sendBtn.disabled = true;
+            if (attachBtn) attachBtn.disabled = true;
             activeRoomTitle.textContent = "Select or Create a Room";
             if (startCallBtn) {
                 startCallBtn.style.display = 'none';
@@ -329,8 +348,19 @@ async function fetchRoomMessages(roomId) {
             
             const senderName = isOutgoing ? 'You' : (msg.sender_id === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (msg.sender_id === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'User'));
 
+            let contentHTML = msg.content;
+            if (msg.content && (msg.content.startsWith('/uploads/') || msg.content.endsWith('.mp4') || msg.content.endsWith('.webm') || msg.content.endsWith('.ogg') || msg.content.endsWith('.mov') || msg.content.includes('/uploads/'))) {
+                contentHTML = `
+                    <div style="margin-top: 0.5rem; max-width: 320px; border-radius: 8px; overflow: hidden; background: #000; aspect-ratio: 16/9;">
+                        <video src="${msg.content}" controls style="width: 100%; height: 100%; object-fit: cover;"></video>
+                    </div>
+                `;
+            } else {
+                contentHTML = `<div>${msg.content}</div>`;
+            }
+
             bubble.innerHTML = `
-                <div>${msg.content}</div>
+                ${contentHTML}
                 <div class="message-meta">
                     <span>${senderName}</span>
                     <span>${timeStr}</span>
@@ -475,6 +505,49 @@ function sendMessage() {
     input.value = '';
 }
 
+async function uploadVideoFile(file) {
+    const attachBtn = getElement('chat-attach-btn');
+    if (!attachBtn) return;
+    const originalText = attachBtn.textContent;
+    attachBtn.textContent = '⏳';
+    attachBtn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(errText || `Upload failed: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        const videoURL = data.url;
+
+        // Send the video message over WebSocket!
+        sendWSMessage('chat.send', {
+            roomId: store.activeRoom.id,
+            content: videoURL
+        });
+
+    } catch (err) {
+        console.error("Error uploading video file:", err);
+        alert("Upload failed: " + err.message);
+    } finally {
+        attachBtn.textContent = originalText;
+        attachBtn.disabled = false;
+    }
+}
+
 function registerSocketHandlers() {
     registerSocketListener('chat.receive', (data) => {
         const container = getElement('messages-container');
@@ -491,8 +564,19 @@ function registerSocketHandlers() {
         
         const senderName = isOutgoing ? 'You' : (data.senderId === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (data.senderId === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'User'));
 
+        let contentHTML = data.content;
+        if (data.content && (data.content.startsWith('/uploads/') || data.content.endsWith('.mp4') || data.content.endsWith('.webm') || data.content.endsWith('.ogg') || data.content.endsWith('.mov') || data.content.includes('/uploads/'))) {
+            contentHTML = `
+                <div style="margin-top: 0.5rem; max-width: 320px; border-radius: 8px; overflow: hidden; background: #000; aspect-ratio: 16/9;">
+                    <video src="${data.content}" controls style="width: 100%; height: 100%; object-fit: cover;"></video>
+                </div>
+            `;
+        } else {
+            contentHTML = `<div>${data.content}</div>`;
+        }
+
         bubble.innerHTML = `
-            <div>${data.content}</div>
+            ${contentHTML}
             <div class="message-meta">
                 <span>${senderName}</span>
                 <span>${data.createdAt || 'now'}</span>
