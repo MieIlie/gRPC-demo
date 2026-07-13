@@ -112,7 +112,6 @@ async function startOutgoingCall() {
 
     } catch (err) {
         console.error("Error initiating call:", err);
-        alert("Could not start call: " + err.message);
         hideCallUI();
     }
 }
@@ -172,7 +171,6 @@ async function startLoopbackCall() {
 
     } catch (err) {
         console.error("Error starting loopback call:", err);
-        alert("Camera/Mic access is required for video demo: " + err.message);
         cleanupCall();
         hideCallUI();
     }
@@ -216,7 +214,6 @@ async function acceptIncomingCall() {
 
     } catch (err) {
         console.error("Error accepting call:", err);
-        alert("Camera/Mic access is required to connect video calls.");
         declineOrEndCall();
     }
 }
@@ -267,6 +264,13 @@ function createPeerConnection() {
         localStream.getTracks().forEach(track => {
             peerConnection.addTrack(track, localStream);
         });
+    } else {
+        try {
+            peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+            peerConnection.addTransceiver('video', { direction: 'recvonly' });
+        } catch (transceiverErr) {
+            console.warn("Could not add recvonly transceivers:", transceiverErr);
+        }
     }
 }
 
@@ -385,7 +389,6 @@ function registerCallSocketHandlers() {
 
         } catch (err) {
             console.error("Failed to setup WebRTC caller streams:", err);
-            alert("Could not access camera/mic: " + err.message);
             declineOrEndCall();
         }
     });
@@ -432,7 +435,7 @@ function registerCallSocketHandlers() {
 
     // 6. Call Rejected Event (On Caller)
     registerSocketListener('call.rejected', (data) => {
-        alert("Call was declined.");
+        console.log("Call was declined by peer.");
         cleanupCall();
         hideCallUI();
     });
