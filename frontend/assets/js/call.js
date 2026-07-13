@@ -61,13 +61,19 @@ function setupCallListeners() {
 
 async function startOutgoingCall() {
     const activeRoom = store.activeRoom;
-    if (!activeRoom) return;
+    console.log("startOutgoingCall triggered. Active room:", activeRoom);
+    if (!activeRoom) {
+        console.warn("No active room selected.");
+        return;
+    }
 
     if (activeRoom.type !== 'direct') {
+        console.log("Room type is not direct (type: " + activeRoom.type + "). Launching loopback call demo...");
         startLoopbackCall();
         return;
     }
 
+    console.log("Room type is direct. Initiating real P2P call signaling...");
     try {
         // Fetch members of the direct room to find the target user ID
         const token = localStorage.getItem('token');
