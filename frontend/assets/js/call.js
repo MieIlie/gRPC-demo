@@ -117,16 +117,36 @@ async function startOutgoingCall() {
     }
 }
 
+async function getLocalStream() {
+    try {
+        return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (err) {
+        console.warn("Camera and Mic request failed, falling back to audio only...", err);
+        try {
+            return await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (audioErr) {
+            console.error("Microphone access failed too:", audioErr);
+            throw new Error("No camera or microphone device could be accessed.");
+        }
+    }
+}
+
 async function startLoopbackCall() {
     try {
         showCallUI('connecting', 'Demo Loopback Call');
         getElement('call-status-title').textContent = "Connecting Demo Call...";
 
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localStream = await getLocalStream();
         
         const localVideo = getElement('local-video');
         if (localVideo) {
-            localVideo.srcObject = localStream;
+            if (localStream.getVideoTracks().length > 0) {
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+            } else {
+                localVideo.srcObject = null;
+                localVideo.style.display = 'none';
+            }
         }
 
         const remoteVideo = getElement('remote-video');
@@ -164,11 +184,17 @@ async function acceptIncomingCall() {
     try {
         showCallUI('connecting', 'Connecting...');
         
-        // 1. Get User Media (Camera & Microphone)
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // 1. Get User Media (Camera & Microphone with fallback)
+        localStream = await getLocalStream();
         const localVideo = getElement('local-video');
         if (localVideo) {
-            localVideo.srcObject = localStream;
+            if (localStream.getVideoTracks().length > 0) {
+                localVideo.srcObject = localStream;
+                localVideo.style.display = 'block';
+            } else {
+                localVideo.srcObject = null;
+                localVideo.style.display = 'none';
+            }
         }
 
         // Show video stream UI
@@ -326,10 +352,16 @@ function registerCallSocketHandlers() {
 
         try {
             // Get local camera & microphone streams
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localStream = await getLocalStream();
             const localVideo = getElement('local-video');
             if (localVideo) {
-                localVideo.srcObject = localStream;
+                if (localStream.getVideoTracks().length > 0) {
+                    localVideo.srcObject = localStream;
+                    localVideo.style.display = 'block';
+                } else {
+                    localVideo.srcObject = null;
+                    localVideo.style.display = 'none';
+                }
             }
 
             // Show video elements
