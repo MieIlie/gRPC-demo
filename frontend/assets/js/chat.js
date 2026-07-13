@@ -7,8 +7,10 @@ import { clearTraces } from './traces.js';
 let isTypingSent = false;
 let typingTimeout = null;
 let activeTypingUsers = {};
+let chatListenersInitialized = false;
 
 export function initChat() {
+    chatListenersInitialized = false; // Reset on fresh view load (new DOM elements)
     setupChatDOM();
     setupChatListeners();
     registerSocketHandlers();
@@ -31,6 +33,9 @@ function setupChatDOM() {
 }
 
 function setupChatListeners() {
+    if (chatListenersInitialized) return;
+    chatListenersInitialized = true;
+
     const logoutBtn = getElement('logout-btn');
     const sendBtn = getElement('chat-send-btn');
     const input = getElement('chat-message-input');
