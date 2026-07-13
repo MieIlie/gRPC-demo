@@ -4,6 +4,10 @@ import { logout } from './auth.js';
 import { sendWSMessage, registerSocketListener } from './socket.js';
 import { clearTraces } from './traces.js';
 
+let isTypingSent = false;
+let typingTimeout = null;
+let activeTypingUsers = {};
+
 export function initChat() {
     setupChatDOM();
     setupChatListeners();
@@ -108,6 +112,10 @@ function setupChatListeners() {
         }
     });
 
+    input.addEventListener('input', () => {
+        sendTypingIndicator();
+    });
+
     let lastTracesLength = 0;
 
     const unsubscribe = store.subscribe((state) => {
@@ -117,14 +125,25 @@ function setupChatListeners() {
             return;
         }
 
+        const startCallBtn = getElement('start-call-btn');
         if (state.activeRoom) {
             input.disabled = false;
             sendBtn.disabled = false;
             activeRoomTitle.textContent = state.activeRoom.name;
+            if (startCallBtn) {
+                if (state.activeRoom.type === 'direct') {
+                    startCallBtn.style.display = 'block';
+                } else {
+                    startCallBtn.style.display = 'none';
+                }
+            }
         } else {
             input.disabled = true;
             sendBtn.disabled = true;
             activeRoomTitle.textContent = "Select or Create a Room";
+            if (startCallBtn) {
+                startCallBtn.style.display = 'none';
+            }
         }
 
         // Live connection indicator updates (sidebar and nodes)
@@ -335,6 +354,118 @@ async function fetchRoomMessages(roomId) {
     }
 }
 
+function sendTypingIndicator() {
+    if (!store.activeRoom) return;
+    if (isTypingSent) return;
+
+    isTypingSent = true;
+    sendWSMessage('chat.typing', {
+        roomId: store.activeRoom.id
+    });
+
+    setTimeout(() => {
+        isTypingSent = false;
+    }, 2000);
+}
+
+function renderOnlineUsers() {
+    const listEl = getElement('online-users-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    const online = store.onlineUsers || [];
+    if (online.length === 0) {
+        listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem;">No users online</div>';
+        return;
+    }
+
+    online.forEach(uID => {
+        const isSelf = store.currentUser && store.currentUser.id === uID;
+        const name = isSelf ? 'You' : (uID === '11111111-1111-1111-1111-111111111111' ? 'Alice Henderson' : (uID === '22222222-2222-2222-2222-222222222222' ? 'Bob Vance' : 'User'));
+        
+        const item = document.createElement('div');
+        item.className = 'room-item';
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.gap = '0.5rem';
+        
+        if (isSelf) {
+            item.style.cursor = 'default';
+        } else {
+            item.style.cursor = 'pointer';
+            item.title = `Click to message ${name}`;
+            item.addEventListener('click', () => {
+                startDirectMessage(uID, name);
+            });
+        }
+
+        item.innerHTML = `
+            <span class="status-dot" style="background: var(--success); width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+            <span>${name}</span>
+        `;
+        listEl.appendChild(item);
+    });
+}
+
+async function startDirectMessage(targetUserId, displayName) {
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/rooms', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                room_type: 0, // DIRECT
+                room_name: `DM with ${displayName}`,
+                member_ids: [targetUserId]
+            })
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to start DM: ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        const room = data.room;
+
+        // Re-fetch all rooms
+        await fetchRooms();
+
+        // Switch to the DM room
+        const targetRoom = {
+            id: room.id,
+            name: room.room_name || `DM with ${displayName}`,
+            type: 'direct'
+        };
+        store.setState({ activeRoom: targetRoom });
+        renderRooms();
+        fetchRoomMessages(room.id);
+    } catch (err) {
+        console.error("Error starting direct message:", err);
+        alert("Error starting DM: " + err.message);
+    }
+}
+
+function updateTypingUI() {
+    const indicatorEl = getElement('room-typing-indicator');
+    if (!indicatorEl) return;
+
+    const typers = Object.keys(activeTypingUsers).filter(id => activeTypingUsers[id] === true);
+    if (typers.length === 0) {
+        indicatorEl.textContent = '';
+        return;
+    }
+
+    const names = typers.map(id => id === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (id === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'Someone'));
+    if (names.length === 1) {
+        indicatorEl.textContent = `${names[0]} is typing...`;
+    } else {
+        indicatorEl.textContent = `${names.join(', ')} are typing...`;
+    }
+}
+
 function sendMessage() {
     const input = getElement('chat-message-input');
     const content = input.value.trim();
@@ -362,16 +493,61 @@ function registerSocketHandlers() {
         const bubble = document.createElement('div');
         bubble.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
         
+        const senderName = isOutgoing ? 'You' : (data.senderId === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (data.senderId === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'User'));
+
         bubble.innerHTML = `
             <div>${data.content}</div>
             <div class="message-meta">
-                <span>${isOutgoing ? 'You' : (data.senderName || 'User')}</span>
+                <span>${senderName}</span>
                 <span>${data.createdAt || 'now'}</span>
             </div>
         `;
 
         container.appendChild(bubble);
         container.scrollTop = container.scrollHeight;
+    });
+
+    registerSocketListener('chat.typing', (data) => {
+        if (!store.activeRoom || store.activeRoom.id !== data.roomId) return;
+
+        activeTypingUsers[data.userId] = true;
+        updateTypingUI();
+
+        // Clear typing indicator for this user after 3 seconds of inactivity
+        if (typingTimeout) {
+            clearTimeout(typingTimeout);
+        }
+        typingTimeout = setTimeout(() => {
+            activeTypingUsers[data.userId] = false;
+            updateTypingUI();
+        }, 3000);
+    });
+
+    registerSocketListener('user.online_list', (userIds) => {
+        store.setState({ onlineUsers: userIds || [] });
+        renderOnlineUsers();
+    });
+
+    registerSocketListener('user.online', (data) => {
+        const current = store.onlineUsers || [];
+        if (!current.includes(data.userId)) {
+            const updated = [...current, data.userId];
+            store.setState({ onlineUsers: updated });
+            renderOnlineUsers();
+        }
+    });
+
+    registerSocketListener('user.offline', (data) => {
+        const current = store.onlineUsers || [];
+        const updated = current.filter(id => id !== data.userId);
+        store.setState({ onlineUsers: updated });
+        renderOnlineUsers();
+        
+        // Also remove from typing users if they go offline
+        if (activeTypingUsers[data.userId]) {
+            delete activeTypingUsers[data.userId];
+            updateTypingUI();
+        }
     });
 }
 

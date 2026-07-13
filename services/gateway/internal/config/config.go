@@ -11,6 +11,7 @@ type Config struct {
 	AllowedOrigins  []string
 	AuthServiceAddr string
 	ChatServiceAddr string
+	CallServiceAddr string
 }
 
 func Load() *Config {
@@ -47,12 +48,18 @@ func Load() *Config {
 		chatServiceAddr = "chat-service:50052"
 	}
 
+	callServiceAddr := os.Getenv("CALL_SERVICE_ADDR")
+	if callServiceAddr == "" {
+		callServiceAddr = "call-service:50053"
+	}
+
 	return &Config{
 		Port:            port,
 		JWTSecret:       secret,
 		AllowedOrigins:  allowedOrigins,
 		AuthServiceAddr: authServiceAddr,
 		ChatServiceAddr: chatServiceAddr,
+		CallServiceAddr: callServiceAddr,
 	}
 }
 

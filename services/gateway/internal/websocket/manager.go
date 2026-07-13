@@ -1,7 +1,9 @@
 package websocket
 
 import (
+	"encoding/json"
 	"gateway/internal/trace"
+	"gateway/internal/types"
 	"shared/logger"
 	"sync"
 )
@@ -19,13 +21,20 @@ func NewManager() *Manager {
 
 func (m *Manager) Register(c *Client) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	isFirstConn := false
 	if _, exists := m.clients[c.ID]; !exists {
 		m.clients[c.ID] = make(map[*Client]bool)
+		isFirstConn = true
 	}
 	m.clients[c.ID][c] = true
-	logger.Info("User %s registered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
+
+	onlineUsers := make([]string, 0, len(m.clients))
+	for userID := range m.clients {
+		onlineUsers = append(onlineUsers, userID)
+	}
+	m.mu.Unlock()
+
+	logger.Info("User %s registered (conn: %p). Total users: %d", c.ID, c.Conn, len(onlineUsers))
 
 	trace.GetTracker().Record(&trace.Event{
 		Source:   "Client (" + c.ID + ")",
@@ -35,27 +44,96 @@ func (m *Manager) Register(c *Client) {
 		Message:  "User connected and registered",
 		Status:   "success",
 	})
+
+	// 1. Send the newly connected client the current online users list
+	listData, _ := json.Marshal(onlineUsers)
+	listEnvelope := types.WSMessage{
+		Event: "user.online_list",
+		Data:  listData,
+	}
+	listBytes, _ := json.Marshal(listEnvelope)
+	select {
+	case c.Send <- listBytes:
+	default:
+	}
+
+	// 2. If it's the user's first connection, broadcast user.online to all other clients
+	if isFirstConn {
+		onlineData, _ := json.Marshal(map[string]string{"userId": c.ID})
+		onlineEnvelope := types.WSMessage{
+			Event: "user.online",
+			Data:  onlineData,
+		}
+		onlineBytes, _ := json.Marshal(onlineEnvelope)
+
+		m.mu.RLock()
+		var clientsToNotify []*Client
+		for uID, conns := range m.clients {
+			if uID != c.ID {
+				for client := range conns {
+					clientsToNotify = append(clientsToNotify, client)
+				}
+			}
+		}
+		m.mu.RUnlock()
+
+		for _, client := range clientsToNotify {
+			select {
+			case client.Send <- onlineBytes:
+			default:
+			}
+		}
+	}
 }
 
 func (m *Manager) Unregister(c *Client) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	isLastConn := false
 	if conns, exists := m.clients[c.ID]; exists {
 		delete(conns, c)
 		if len(conns) == 0 {
 			delete(m.clients, c.ID)
+			isLastConn = true
 		}
-		logger.Info("User %s unregistered (conn: %p). Total users: %d", c.ID, c.Conn, len(m.clients))
+	}
+	totalUsers := len(m.clients)
+	m.mu.Unlock()
 
-		trace.GetTracker().Record(&trace.Event{
-			Source:   "Client (" + c.ID + ")",
-			Target:   "Gateway",
-			Protocol: "WebSocket",
-			Type:     "Disconnect",
-			Message:  "User disconnected and unregistered",
-			Status:   "success",
-		})
+	logger.Info("User %s unregistered (conn: %p). Total users: %d", c.ID, c.Conn, totalUsers)
+
+	trace.GetTracker().Record(&trace.Event{
+		Source:   "Client (" + c.ID + ")",
+		Target:   "Gateway",
+		Protocol: "WebSocket",
+		Type:     "Disconnect",
+		Message:  "User disconnected and unregistered",
+		Status:   "success",
+	})
+
+	// 3. If it's the user's last connection, broadcast user.offline to all other clients
+	if isLastConn {
+		offlineData, _ := json.Marshal(map[string]string{"userId": c.ID})
+		offlineEnvelope := types.WSMessage{
+			Event: "user.offline",
+			Data:  offlineData,
+		}
+		offlineBytes, _ := json.Marshal(offlineEnvelope)
+
+		m.mu.RLock()
+		var clientsToNotify []*Client
+		for _, conns := range m.clients {
+			for client := range conns {
+				clientsToNotify = append(clientsToNotify, client)
+			}
+		}
+		m.mu.RUnlock()
+
+		for _, client := range clientsToNotify {
+			select {
+			case client.Send <- offlineBytes:
+			default:
+			}
+		}
 	}
 }
 

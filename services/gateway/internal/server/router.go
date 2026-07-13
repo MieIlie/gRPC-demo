@@ -23,16 +23,18 @@ type Router struct {
 	wsRouter   *websocket.Router
 	authClient *grpc.AuthClient
 	chatClient *grpc.ChatClient
+	callClient *grpc.CallClient
 	mux        *http.ServeMux
 }
 
-func NewRouter(cfg *config.Config, wsMgr *websocket.Manager, authCli *grpc.AuthClient, chatCli *grpc.ChatClient) *Router {
+func NewRouter(cfg *config.Config, wsMgr *websocket.Manager, authCli *grpc.AuthClient, chatCli *grpc.ChatClient, callCli *grpc.CallClient) *Router {
 	r := &Router{
 		config:     cfg,
 		wsManager:  wsMgr,
-		wsRouter:   websocket.NewRouter(wsMgr, chatCli),
+		wsRouter:   websocket.NewRouter(wsMgr, chatCli, callCli),
 		authClient: authCli,
 		chatClient: chatCli,
+		callClient: callCli,
 		mux:        http.NewServeMux(),
 	}
 	r.registerRoutes()
@@ -254,6 +256,23 @@ func (r *Router) registerRoutes() {
 		}
 
 		resp, err := r.chatClient.GetMessages(req.Context(), roomID, limit, beforeTime)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	protectedMux.HandleFunc("GET /api/rooms/{id}/members", func(w http.ResponseWriter, req *http.Request) {
+		roomID := req.PathValue("id")
+		if roomID == "" {
+			http.Error(w, "Room ID is required", http.StatusBadRequest)
+			return
+		}
+
+		resp, err := r.chatClient.GetRoomMembers(req.Context(), roomID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

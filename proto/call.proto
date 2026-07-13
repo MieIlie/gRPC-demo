@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package call;
+
+option go_package = "gen/call;call";
+
+import "google/protobuf/timestamp.proto";
+
+enum CallType {
+    VOICE = 0;
+    VIDEO = 1;
+}
+
+enum CallStatus {
+    PENDING = 0;
+    ACCEPTED = 1;
+    REJECTED = 2;
+    ENDED = 3;
+    MISSED = 4;
+}
+
+service CallService {
+    rpc StartCall (StartCallRequest) returns (StartCallResponse);
+    rpc AcceptCall (AcceptCallRequest) returns (AcceptCallResponse);
+    rpc RejectCall (RejectCallRequest) returns (RejectCallResponse);
+    rpc EndCall (EndCallRequest) returns (EndCallResponse);
+    rpc GetCallSession (GetCallSessionRequest) returns (GetCallSessionResponse);
+}
+
+message CallSession {
+    string id = 1;
+    string room_id = 2;
+    string caller_id = 3;
+    string receiver_id = 4;
+    CallType call_type = 5;
+    CallStatus status = 6;
+    google.protobuf.Timestamp started_at = 7;
+    google.protobuf.Timestamp ended_at = 8;
+    google.protobuf.Timestamp created_at = 9;
+}
+
+message StartCallRequest {
+    string room_id = 1;
+    string caller_id = 2;
+    string receiver_id = 3;
+    CallType call_type = 4;
+}
+
+message StartCallResponse {
+    CallSession session = 1;
+}
+
+message AcceptCallRequest {
+    string call_id = 1;
+}
+
+message AcceptCallResponse {
+    CallSession session = 1;
+}
+
+message RejectCallRequest {
+    string call_id = 1;
+}
+
+message RejectCallResponse {
+    CallSession session = 1;
+}
+
+message EndCallRequest {
+    string call_id = 1;
+}
+
+message EndCallResponse {
+    CallSession session = 1;
+}
+
+message GetCallSessionRequest {
+    string call_id = 1;
+}
+
+message GetCallSessionResponse {
+    CallSession session = 1;
+}

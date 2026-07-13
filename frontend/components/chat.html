@@ -37,6 +37,16 @@
                 <div class="room-item active">General Room</div>
             </div>
         </div>
+
+        <!-- Online Users Panel -->
+        <div class="rooms-panel" style="margin-top: 1.5rem; border-top: 1px solid var(--border-light); padding-top: 1rem;">
+            <div class="rooms-title-bar">
+                <span>Online Users</span>
+            </div>
+            <div id="online-users-list">
+                <!-- Online users will be rendered here dynamically -->
+            </div>
+        </div>
     </aside>
 
     <!-- Main Message & Service Monitor Interface -->
@@ -45,6 +55,7 @@
         <header class="chat-header">
             <div class="chat-header-left">
                 <div class="chat-room-title" id="active-room-title">Select or Create a Room</div>
+                <div id="room-typing-indicator" style="font-size: 0.85rem; color: var(--secondary); margin-left: 1rem; font-style: italic; align-self: center;"></div>
                 <div class="chat-tabs">
                     <button class="tab-btn active" id="chat-tab-btn">💬 Chat Feed</button>
                     <button class="tab-btn" id="monitor-tab-btn">🖥️ Service Monitor</button>
@@ -109,15 +120,15 @@
                                 <div class="node-name">Auth Service</div>
                                 <div class="node-status" id="status-auth-node">Port 50051</div>
                             </div>
-                            <div class="network-node stub" id="node-chat">
+                            <div class="network-node" id="node-chat">
                                 <div class="node-icon">💬</div>
                                 <div class="node-name">Chat Service</div>
-                                <div class="node-status">Port 50052 (Stub)</div>
+                                <div class="node-status">Port 50052</div>
                             </div>
-                            <div class="network-node stub" id="node-call">
+                            <div class="network-node" id="node-call">
                                 <div class="node-icon">📞</div>
                                 <div class="node-name">Call Service</div>
-                                <div class="node-status">Port 50053 (Stub)</div>
+                                <div class="node-status">Port 50053</div>
                             </div>
                         </div>
                     </div>
