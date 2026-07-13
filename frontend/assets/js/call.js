@@ -5,6 +5,8 @@ import { sendWSMessage, registerSocketListener } from './socket.js';
 let localStream = null;
 let peerConnection = null;
 let currentCall = null; // { id, callerId, receiverId, callType, status }
+let isMicMuted = false;
+let isCamOff = true;
 
 const iceServers = {
     iceServers: [
@@ -33,10 +35,100 @@ export async function initCall() {
     }
 }
 
+function toggleMicrophone() {
+    if (!localStream) return;
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+
+    isMicMuted = !isMicMuted;
+    audioTracks.forEach(track => {
+        track.enabled = !isMicMuted;
+    });
+
+    const micBtn = getElement('toggle-mic-btn');
+    if (micBtn) {
+        micBtn.textContent = isMicMuted ? "🎤 Unmute Mic" : "🎤 Mute Mic";
+        micBtn.style.background = isMicMuted ? "var(--error)" : "var(--bg-card)";
+    }
+}
+
+async function toggleCamera() {
+    const camBtn = getElement('toggle-cam-btn');
+    const localVideo = getElement('local-video');
+
+    // Case 1: We already have a local video track, just toggle its enabled state
+    if (localStream && localStream.getVideoTracks().length > 0) {
+        isCamOff = !isCamOff;
+        localStream.getVideoTracks().forEach(track => {
+            track.enabled = !isCamOff;
+        });
+        
+        if (localVideo) {
+            localVideo.style.display = isCamOff ? 'none' : 'block';
+        }
+        
+        if (camBtn) {
+            camBtn.textContent = isCamOff ? "📷 Camera On" : "📷 Camera Off";
+            camBtn.style.background = isCamOff ? "var(--bg-card)" : "var(--success)";
+        }
+        return;
+    }
+
+    // Case 2: We don't have a local video track yet (e.g. startup fallback to audio-only).
+    // Let's attempt to request camera access dynamically!
+    try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoTrack = videoStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+
+        // If localStream doesn't exist, create one
+        if (!localStream) {
+            localStream = videoStream;
+        } else {
+            localStream.addTrack(videoTrack);
+        }
+
+        // Add the video track to peer connection if it is active
+        if (peerConnection) {
+            const senders = peerConnection.getSenders();
+            const videoSender = senders.find(sender => sender.track && sender.track.kind === 'video');
+            if (videoSender) {
+                await videoSender.replaceTrack(videoTrack);
+            } else {
+                peerConnection.addTrack(videoTrack, localStream);
+                // Renegotiate the connection
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                sendWSMessage('webrtc.offer', {
+                    callId: currentCall.id,
+                    sdp: offer
+                });
+            }
+        }
+
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+            localVideo.style.display = 'block';
+        }
+
+        isCamOff = false;
+        if (camBtn) {
+            camBtn.textContent = "📷 Camera Off";
+            camBtn.style.background = "var(--success)";
+        }
+
+    } catch (err) {
+        console.error("Failed to dynamically enable camera:", err);
+        // Clean non-blocking alert since it is user-requested action
+        alert("Webcam not found or permission denied: " + err.message);
+    }
+}
+
 function setupCallListeners() {
     const acceptBtn = getElement('accept-call-btn');
     const rejectBtn = getElement('reject-call-btn');
-    const startCallBtn = getElement('start-call-btn');
+    const toggleMicBtn = getElement('toggle-mic-btn');
+    const toggleCamBtn = getElement('toggle-cam-btn');
 
     if (acceptBtn) {
         acceptBtn.addEventListener('click', () => {
@@ -47,6 +139,18 @@ function setupCallListeners() {
     if (rejectBtn) {
         rejectBtn.addEventListener('click', () => {
             declineOrEndCall();
+        });
+    }
+
+    if (toggleMicBtn) {
+        toggleMicBtn.addEventListener('click', () => {
+            toggleMicrophone();
+        });
+    }
+
+    if (toggleCamBtn) {
+        toggleCamBtn.addEventListener('click', () => {
+            toggleCamera();
         });
     }
 
@@ -165,9 +269,8 @@ async function startLoopbackCall() {
             status: 'active'
         };
 
+        showCallUI('active', 'Demo Loopback Call');
         getElement('call-status-title').textContent = "Active Demo Call (Loopback)";
-        const rejectBtn = getElement('reject-call-btn');
-        if (rejectBtn) rejectBtn.textContent = "End Call";
 
     } catch (err) {
         console.error("Error starting loopback call:", err);
@@ -210,7 +313,7 @@ async function acceptIncomingCall() {
         });
 
         currentCall.status = 'active';
-        getElement('call-status-title').textContent = "Active Video Call";
+        showCallUI('active', 'Active Call');
 
     } catch (err) {
         console.error("Error accepting call:", err);
@@ -299,24 +402,62 @@ function showCallUI(status, displayName) {
     const videoContainer = getElement('call-video-container');
     const avatarsContainer = getElement('call-avatars-container');
 
+    const controlsContainer = getElement('call-controls-container');
+
     if (remoteUserLabel) remoteUserLabel.textContent = displayName;
 
-    if (status === 'dialing') {
-        statusTitle.textContent = "Dialing Call...";
-        if (acceptBtn) acceptBtn.style.display = 'none';
-        if (rejectBtn) rejectBtn.textContent = "Cancel";
-        if (videoContainer) videoContainer.style.display = 'none';
-        if (avatarsContainer) avatarsContainer.style.display = 'flex';
-    } else if (status === 'incoming') {
-        statusTitle.textContent = "Incoming Call...";
-        if (acceptBtn) acceptBtn.style.display = 'block';
-        if (rejectBtn) rejectBtn.textContent = "Decline";
-        if (videoContainer) videoContainer.style.display = 'none';
-        if (avatarsContainer) avatarsContainer.style.display = 'flex';
-    } else if (status === 'connecting') {
-        statusTitle.textContent = "Connecting Call...";
+    if (status === 'active') {
+        statusTitle.textContent = "Active Call";
         if (acceptBtn) acceptBtn.style.display = 'none';
         if (rejectBtn) rejectBtn.textContent = "End Call";
+        if (videoContainer) videoContainer.style.display = 'flex';
+        if (avatarsContainer) avatarsContainer.style.display = 'none';
+        
+        if (controlsContainer) {
+            controlsContainer.style.display = 'flex';
+            const camBtn = getElement('toggle-cam-btn');
+            const micBtn = getElement('toggle-mic-btn');
+            
+            isMicMuted = false;
+            if (micBtn) {
+                micBtn.textContent = "🎤 Mute Mic";
+                micBtn.style.background = "var(--bg-card)";
+            }
+            
+            if (localStream && localStream.getVideoTracks().length > 0) {
+                isCamOff = false;
+                if (camBtn) {
+                    camBtn.textContent = "📷 Camera Off";
+                    camBtn.style.background = "var(--success)";
+                }
+            } else {
+                isCamOff = true;
+                if (camBtn) {
+                    camBtn.textContent = "📷 Camera On";
+                    camBtn.style.background = "var(--bg-card)";
+                }
+            }
+        }
+    } else {
+        if (controlsContainer) controlsContainer.style.display = 'none';
+
+        if (status === 'dialing') {
+            statusTitle.textContent = "Dialing Call...";
+            if (acceptBtn) acceptBtn.style.display = 'none';
+            if (rejectBtn) rejectBtn.textContent = "Cancel";
+            if (videoContainer) videoContainer.style.display = 'none';
+            if (avatarsContainer) avatarsContainer.style.display = 'flex';
+        } else if (status === 'incoming') {
+            statusTitle.textContent = "Incoming Call...";
+            if (acceptBtn) acceptBtn.style.display = 'block';
+            if (rejectBtn) rejectBtn.textContent = "Decline";
+            if (videoContainer) videoContainer.style.display = 'none';
+            if (avatarsContainer) avatarsContainer.style.display = 'flex';
+        } else if (status === 'connecting') {
+            statusTitle.textContent = "Connecting Call...";
+            if (acceptBtn) acceptBtn.style.display = 'none';
+            if (rejectBtn) rejectBtn.textContent = "End Call";
+        }
     }
 }
 
@@ -329,6 +470,8 @@ function hideCallUI() {
     if (videoContainer) videoContainer.style.display = 'none';
     const avatarsContainer = getElement('call-avatars-container');
     if (avatarsContainer) avatarsContainer.style.display = 'flex';
+    const controlsContainer = getElement('call-controls-container');
+    if (controlsContainer) controlsContainer.style.display = 'none';
 }
 
 function registerCallSocketHandlers() {
@@ -352,7 +495,6 @@ function registerCallSocketHandlers() {
         currentCall.status = 'active';
 
         showCallUI('connecting', 'Connecting video...');
-        getElement('call-status-title').textContent = "Active Video Call";
 
         try {
             // Get local camera & microphone streams
@@ -386,6 +528,8 @@ function registerCallSocketHandlers() {
                 callId: currentCall.id,
                 sdp: offer
             });
+
+            showCallUI('active', 'Active Call');
 
         } catch (err) {
             console.error("Failed to setup WebRTC caller streams:", err);
