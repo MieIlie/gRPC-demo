@@ -81,25 +81,25 @@ async function startOutgoingCall() {
 
         const data = await res.json();
         const members = data.members || [];
-        const peer = members.find(m => m.userId !== store.currentUser.id);
+        const peer = members.find(m => m.user_id !== store.currentUser.id);
         if (!peer) {
             alert("No recipient found in this DM room.");
             return;
         }
 
         // Show Dialing UI
-        showCallUI('dialing', peer.displayName || peer.username);
+        showCallUI('dialing', peer.display_name || peer.username);
 
         // Send call.start event
         sendWSMessage('call.start', {
             roomId: activeRoom.id,
-            targetUserId: peer.userId,
+            targetUserId: peer.user_id,
             callType: 'video'
         });
 
         currentCall = {
             callerId: store.currentUser.id,
-            receiverId: peer.userId,
+            receiverId: peer.user_id,
             callType: 'video',
             status: 'dialing'
         };

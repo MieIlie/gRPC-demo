@@ -336,6 +336,7 @@ func (r *Router) registerRoutes() {
 	r.mux.Handle("/api/protected", jwtMiddleware(protectedMux))
 	r.mux.Handle("/api/rooms", jwtMiddleware(protectedMux))
 	r.mux.Handle("/api/rooms/", jwtMiddleware(protectedMux))
+	r.mux.Handle("/api/upload", jwtMiddleware(protectedMux))
 	r.mux.Handle("/ws", jwtMiddleware(protectedMux))
 }
 
