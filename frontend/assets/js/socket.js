@@ -99,8 +99,5 @@ function handleWSMessage(msg) {
 const socketEventListeners = {};
 
 export function registerSocketListener(event, callback) {
-    if (!socketEventListeners[event]) {
-        socketEventListeners[event] = [];
-    }
-    socketEventListeners[event].push(callback);
+    socketEventListeners[event] = [callback];
 }
