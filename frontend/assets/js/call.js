@@ -61,7 +61,12 @@ function setupCallListeners() {
 
 async function startOutgoingCall() {
     const activeRoom = store.activeRoom;
-    if (!activeRoom || activeRoom.type !== 'direct') return;
+    if (!activeRoom) return;
+
+    if (activeRoom.type !== 'direct') {
+        startLoopbackCall();
+        return;
+    }
 
     try {
         // Fetch members of the direct room to find the target user ID
@@ -102,6 +107,47 @@ async function startOutgoingCall() {
     } catch (err) {
         console.error("Error initiating call:", err);
         alert("Could not start call: " + err.message);
+        hideCallUI();
+    }
+}
+
+async function startLoopbackCall() {
+    try {
+        showCallUI('connecting', 'Demo Loopback Call');
+        getElement('call-status-title').textContent = "Connecting Demo Call...";
+
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        
+        const localVideo = getElement('local-video');
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+        }
+
+        const remoteVideo = getElement('remote-video');
+        if (remoteVideo) {
+            remoteVideo.srcObject = localStream;
+        }
+
+        const videoContainer = getElement('call-video-container');
+        if (videoContainer) videoContainer.style.display = 'flex';
+        const avatarsContainer = getElement('call-avatars-container');
+        if (avatarsContainer) avatarsContainer.style.display = 'none';
+
+        currentCall = {
+            callerId: store.currentUser.id,
+            receiverId: store.currentUser.id,
+            callType: 'video',
+            status: 'active'
+        };
+
+        getElement('call-status-title').textContent = "Active Demo Call (Loopback)";
+        const rejectBtn = getElement('reject-call-btn');
+        if (rejectBtn) rejectBtn.textContent = "End Call";
+
+    } catch (err) {
+        console.error("Error starting loopback call:", err);
+        alert("Camera/Mic access is required for video demo: " + err.message);
+        cleanupCall();
         hideCallUI();
     }
 }

@@ -131,11 +131,7 @@ function setupChatListeners() {
             sendBtn.disabled = false;
             activeRoomTitle.textContent = state.activeRoom.name;
             if (startCallBtn) {
-                if (state.activeRoom.type === 'direct') {
-                    startCallBtn.style.display = 'block';
-                } else {
-                    startCallBtn.style.display = 'none';
-                }
+                startCallBtn.style.display = 'block';
             }
         } else {
             input.disabled = true;
