@@ -5,7 +5,7 @@ import { sendWSMessage, registerSocketListener } from './socket.js';
 import { clearTraces } from './traces.js';
 
 let isTypingSent = false;
-let typingTimeout = null;
+let typingTimeouts = {};
 let activeTypingUsers = {};
 let chatListenersInitialized = false;
 let activeBots = [];
@@ -336,17 +336,19 @@ async function fetchRooms() {
         }
 
         const data = await res.json();
-        const mappedRooms = (data.rooms || []).map(r => {
-            const roomType = r.room_type !== undefined ? r.room_type : r.roomType;
-            const roomName = r.room_name !== undefined ? r.room_name : r.roomName;
-            const isGroup = (roomType === 1 || roomType === 'GROUP' || String(roomType).toUpperCase() === 'GROUP');
-            const isDirect = !isGroup;
-            return {
-                id: r.id,
-                name: roomName || (isDirect ? 'Direct Message' : 'Group Room'),
-                type: isDirect ? 'direct' : 'group'
-            };
-        });
+        const mappedRooms = (data.rooms || [])
+            .map(r => {
+                const roomType = r.room_type !== undefined ? r.room_type : r.roomType;
+                const roomName = r.room_name !== undefined ? r.room_name : r.roomName;
+                const isGroup = (roomType === 1 || roomType === 'GROUP' || String(roomType).toUpperCase() === 'GROUP');
+                const isDirect = !isGroup;
+                return {
+                    id: r.id,
+                    name: roomName || (isDirect ? 'Direct Message' : 'Group Room'),
+                    type: isDirect ? 'direct' : 'group'
+                };
+            })
+            .filter(r => r.type !== 'direct');
 
         store.setState({ rooms: mappedRooms });
         renderRooms();
@@ -399,10 +401,21 @@ async function fetchRoomMessages(roomId) {
             bubble.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
             
             let timeStr = 'now';
-            if (msg.created_at) {
-                const date = new Date(msg.created_at);
-                if (!isNaN(date.getTime())) {
-                    timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const rawTime = msg.created_at || msg.createdAt;
+            if (rawTime) {
+                if (typeof rawTime === 'string') {
+                    const date = new Date(rawTime);
+                    if (!isNaN(date.getTime())) {
+                        timeStr = formatMessageTimestamp(date);
+                    }
+                } else if (typeof rawTime === 'object') {
+                    const seconds = rawTime.seconds !== undefined ? rawTime.seconds : rawTime.Seconds;
+                    if (seconds !== undefined && seconds > 0) {
+                        const date = new Date(Number(seconds) * 1000);
+                        if (!isNaN(date.getTime())) {
+                            timeStr = formatMessageTimestamp(date);
+                        }
+                    }
                 }
             }
             
@@ -474,16 +487,7 @@ function renderOnlineUsers() {
         item.style.display = 'flex';
         item.style.alignItems = 'center';
         item.style.gap = '0.5rem';
-        
-        if (isSelf) {
-            item.style.cursor = 'default';
-        } else {
-            item.style.cursor = 'pointer';
-            item.title = `Click to message ${name}`;
-            item.addEventListener('click', () => {
-                startDirectMessage(uID, name);
-            });
-        }
+        item.style.cursor = 'default';
 
         item.innerHTML = `
             <span class="status-dot" style="background: var(--success); width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
@@ -493,44 +497,23 @@ function renderOnlineUsers() {
     });
 }
 
-async function startDirectMessage(targetUserId, displayName) {
-    try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/rooms', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                room_type: 0, // DIRECT
-                room_name: `DM with ${displayName}`,
-                member_ids: [targetUserId]
-            })
-        });
-
-        if (!res.ok) {
-            throw new Error(`Failed to start DM: ${res.statusText}`);
-        }
-
-        const data = await res.json();
-        const room = data.room;
-
-        // Re-fetch all rooms
-        await fetchRooms();
-
-        // Switch to the DM room
-        const targetRoom = {
-            id: room.id,
-            name: room.room_name || room.roomName || `DM with ${displayName}`,
-            type: 'direct'
-        };
-        store.setState({ activeRoom: targetRoom });
-        renderRooms();
-        fetchRoomMessages(room.id);
-    } catch (err) {
-        console.error("Error starting direct message:", err);
-        alert("Error starting DM: " + err.message);
+function formatMessageTimestamp(date) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    
+    const timeOptions = { hour: '2-digit', minute: '2-digit' };
+    const timePart = date.toLocaleTimeString([], timeOptions);
+    
+    const dateMs = date.getTime();
+    
+    if (dateMs >= today.getTime()) {
+        return timePart;
+    } else if (dateMs >= yesterday.getTime()) {
+        return `Yesterday, ${timePart}`;
+    } else {
+        const dateOptions = { month: 'short', day: 'numeric' };
+        return `${date.toLocaleDateString([], dateOptions)}, ${timePart}`;
     }
 }
 
@@ -544,7 +527,14 @@ function updateTypingUI() {
         return;
     }
 
-    const names = typers.map(id => id === '11111111-1111-1111-1111-111111111111' ? 'Alice' : (id === '22222222-2222-2222-2222-222222222222' ? 'Bob' : 'Someone'));
+    const names = typers.map(id => {
+        if (id === '11111111-1111-1111-1111-111111111111') return 'Alice';
+        if (id === '22222222-2222-2222-2222-222222222222') return 'Bob';
+        const bot = activeBots.find(b => b.userId === id);
+        if (bot) return bot.name;
+        return 'Someone';
+    });
+
     if (names.length === 1) {
         indicatorEl.textContent = `${names[0]} is typing...`;
     } else {
@@ -635,11 +625,30 @@ function registerSocketHandlers() {
             contentHTML = `<div>${data.content}</div>`;
         }
 
+        let timeStr = 'now';
+        const rawTime = data.createdAt || data.created_at;
+        if (rawTime) {
+            if (typeof rawTime === 'string') {
+                const date = new Date(rawTime);
+                if (!isNaN(date.getTime())) {
+                    timeStr = formatMessageTimestamp(date);
+                }
+            } else if (typeof rawTime === 'object') {
+                const seconds = rawTime.seconds !== undefined ? rawTime.seconds : rawTime.Seconds;
+                if (seconds !== undefined && seconds > 0) {
+                    const date = new Date(Number(seconds) * 1000);
+                    if (!isNaN(date.getTime())) {
+                        timeStr = formatMessageTimestamp(date);
+                    }
+                }
+            }
+        }
+
         bubble.innerHTML = `
             ${contentHTML}
             <div class="message-meta">
                 <span>${senderName}</span>
-                <span>${data.createdAt || 'now'}</span>
+                <span>${timeStr}</span>
             </div>
         `;
 
@@ -654,12 +663,13 @@ function registerSocketHandlers() {
         updateTypingUI();
 
         // Clear typing indicator for this user after 3 seconds of inactivity
-        if (typingTimeout) {
-            clearTimeout(typingTimeout);
+        if (typingTimeouts[data.userId]) {
+            clearTimeout(typingTimeouts[data.userId]);
         }
-        typingTimeout = setTimeout(() => {
+        typingTimeouts[data.userId] = setTimeout(() => {
             activeTypingUsers[data.userId] = false;
             updateTypingUI();
+            delete typingTimeouts[data.userId];
         }, 3000);
     });
 
@@ -844,11 +854,11 @@ async function spawnBot() {
             
             // Set up sending loop
             messageInterval = setInterval(() => {
-                if (wsConn.readyState === WebSocket.OPEN && store.activeRoom) {
+                if (wsConn.readyState === WebSocket.OPEN) {
                     wsConn.send(JSON.stringify({
                         event: 'chat.send',
                         data: JSON.stringify({
-                            roomId: store.activeRoom.id,
+                            roomId: 'a3333333-3333-3333-3333-333333333333', // General Room only
                             content: getRandomBotMessage()
                         })
                     }));
@@ -869,6 +879,7 @@ async function spawnBot() {
         };
 
         activeBots.push({
+            userId: data.user_id,
             name: displayName,
             ws: wsConn,
             interval: messageInterval
@@ -892,4 +903,3 @@ function stopAllBots() {
     const activeBotsCountEl = getElement('active-bots-count');
     if (activeBotsCountEl) activeBotsCountEl.textContent = '0';
 }
-
