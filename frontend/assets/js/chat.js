@@ -8,6 +8,7 @@ let isTypingSent = false;
 let typingTimeout = null;
 let activeTypingUsers = {};
 let chatListenersInitialized = false;
+let activeBots = [];
 
 export function initChat() {
     chatListenersInitialized = false; // Reset on fresh view load (new DOM elements)
@@ -146,24 +147,17 @@ function setupChatListeners() {
             return;
         }
 
-        const startCallBtn = getElement('start-call-btn');
         const attachBtn = getElement('chat-attach-btn');
         if (state.activeRoom) {
             input.disabled = false;
             sendBtn.disabled = false;
             if (attachBtn) attachBtn.disabled = false;
             activeRoomTitle.textContent = state.activeRoom.name;
-            if (startCallBtn) {
-                startCallBtn.style.display = 'block';
-            }
         } else {
             input.disabled = true;
             sendBtn.disabled = true;
             if (attachBtn) attachBtn.disabled = true;
             activeRoomTitle.textContent = "Select or Create a Room";
-            if (startCallBtn) {
-                startCallBtn.style.display = 'none';
-            }
         }
 
         // Live connection indicator updates (sidebar and nodes)
@@ -244,6 +238,17 @@ function setupChatListeners() {
             }
         }
     });
+
+    const spawnBotBtn = getElement('spawn-bot-btn');
+    const stopBotsBtn = getElement('stop-bots-btn');
+    if (spawnBotBtn && stopBotsBtn) {
+        spawnBotBtn.addEventListener('click', () => {
+            spawnBot();
+        });
+        stopBotsBtn.addEventListener('click', () => {
+            stopAllBots();
+        });
+    }
 
     renderRooms();
 }
@@ -701,10 +706,6 @@ function flashNetworkLink(source, target) {
         connectorId = 'conn-gateway-services';
         nodeSrc = 'node-gateway';
         nodeDest = 'node-chat';
-    } else if (src.includes('gateway') && dest.includes('call')) {
-        connectorId = 'conn-gateway-services';
-        nodeSrc = 'node-gateway';
-        nodeDest = 'node-call';
     }
     
     if (connectorId) {
@@ -729,3 +730,122 @@ function flashNetworkLink(source, target) {
         }
     }
 }
+
+// ==========================================
+// SPAMMER BOT DEMO IMPLEMENTATION
+// ==========================================
+
+const BOT_NAMES = [
+    "James Bot", "Alice Bot", "Bob Vance", "Michael Scott", "Dwight Schrute",
+    "Jim Halpert", "Pam Beesly", "Ryan Howard", "Angela Martin", "Kevin Malone"
+];
+
+const BOT_MESSAGES = [
+    "Hello from the microservices! 🚀",
+    "Testing gRPC chunk streaming performance... ⚡",
+    "Realtime inter-service trace log recorded. 🖥️",
+    "My WebSocket connection is fully authenticated via JWT! 🔑",
+    "Database persistence checked: saving to Postgres users & messages table.",
+    "This demo project highlights microservice isolation and containerization. 🐳",
+    "Speed test: streaming file uploads directly through Gateway proxy.",
+    "Did you see the connection link flash in the Service Monitor graph? 🌟",
+    "Spamming messages to simulate heavy network load! 📈",
+    "Gateway Service allowed origins wildcard config is active for ngrok compatibility.",
+    "No message delivery packet loss detected! 💯"
+];
+
+function getRandomBotMessage() {
+    return BOT_MESSAGES[Math.floor(Math.random() * BOT_MESSAGES.length)];
+}
+
+async function spawnBot() {
+    const activeBotsCountEl = getElement('active-bots-count');
+    const spawnBtn = getElement('spawn-bot-btn');
+    if (spawnBtn) spawnBtn.disabled = true;
+
+    try {
+        const randId = Math.floor(Math.random() * 100000);
+        const username = `bot_${randId}`;
+        const displayName = BOT_NAMES[activeBots.length % BOT_NAMES.length] + ` #${randId}`;
+        
+        // 1. Register Bot User via REST API
+        const registerRes = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: username,
+                password: "botpassword123",
+                display_name: displayName,
+                avatar_url: ""
+            })
+        });
+
+        if (!registerRes.ok) {
+            throw new Error(`Bot registration failed: ${registerRes.statusText}`);
+        }
+
+        const data = await registerRes.json();
+        const token = data.token;
+
+        // 2. Establish WebSocket connection for this bot
+        const loc = window.location;
+        const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${proto}//${loc.host}/ws?token=${token}`;
+        
+        const wsConn = new WebSocket(wsUrl);
+        let messageInterval = null;
+
+        wsConn.onopen = () => {
+            console.log(`Bot ${displayName} WebSocket connected.`);
+            
+            // Set up sending loop
+            messageInterval = setInterval(() => {
+                if (wsConn.readyState === WebSocket.OPEN && store.activeRoom) {
+                    wsConn.send(JSON.stringify({
+                        event: 'chat.send',
+                        data: JSON.stringify({
+                            roomId: store.activeRoom.id,
+                            content: getRandomBotMessage()
+                        })
+                    }));
+                }
+            }, 2000 + Math.random() * 1500); // randomize send intervals slightly (2-3.5 seconds)
+        };
+
+        wsConn.onerror = (err) => {
+            console.error(`Bot ${displayName} connection error:`, err);
+        };
+
+        wsConn.onclose = () => {
+            console.log(`Bot ${displayName} disconnected.`);
+            if (messageInterval) clearInterval(messageInterval);
+            // Cleanup from active bots list
+            activeBots = activeBots.filter(b => b.ws !== wsConn);
+            if (activeBotsCountEl) activeBotsCountEl.textContent = activeBots.length;
+        };
+
+        activeBots.push({
+            name: displayName,
+            ws: wsConn,
+            interval: messageInterval
+        });
+
+        if (activeBotsCountEl) activeBotsCountEl.textContent = activeBots.length;
+
+    } catch (err) {
+        console.error("Failed to spawn demo bot:", err);
+    } finally {
+        if (spawnBtn) spawnBtn.disabled = false;
+    }
+}
+
+function stopAllBots() {
+    activeBots.forEach(bot => {
+        if (bot.interval) clearInterval(bot.interval);
+        if (bot.ws) bot.ws.close();
+    });
+    activeBots = [];
+    const activeBotsCountEl = getElement('active-bots-count');
+    if (activeBotsCountEl) activeBotsCountEl.textContent = '0';
+}
+

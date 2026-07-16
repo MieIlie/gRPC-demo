@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"gen/chat"
+	"gateway/internal/trace"
+	"io"
 	"shared/logger"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -75,3 +78,67 @@ func (cc *ChatClient) GetRoomMembers(ctx context.Context, roomID string) (*chat.
 		RoomId: roomID,
 	})
 }
+
+func (cc *ChatClient) UploadFile(ctx context.Context, filename string, r io.Reader) (string, error) {
+	start := time.Now()
+	stream, err := cc.client.UploadFile(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to open upload stream: %w", err)
+	}
+
+	buf := make([]byte, 32*1024) // 32KB chunk size
+	var totalBytes int64
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			errSend := stream.Send(&chat.UploadFileChunk{
+				Chunk:    buf[:n],
+				Filename: filename,
+			})
+			if errSend != nil {
+				return "", fmt.Errorf("failed to send chunk: %w", errSend)
+			}
+			totalBytes += int64(n)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to read input file: %w", err)
+		}
+	}
+
+	resp, err := stream.CloseAndRecv()
+	duration := time.Since(start).Milliseconds()
+
+	statusVal := "success"
+	var msgText string
+	if err != nil {
+		statusVal = "error"
+		msgText = fmt.Sprintf("UploadFile error: %v", err)
+	} else {
+		sec := float64(duration) / 1000.0
+		mb := float64(totalBytes) / (1024 * 1024)
+		speedStr := ""
+		if sec > 0 {
+			speedStr = fmt.Sprintf(" (%.2f MB/s)", mb/sec)
+		}
+		msgText = fmt.Sprintf("UploadFile { filename: %s, size: %.2f MB%s }", filename, mb, speedStr)
+	}
+
+	trace.GetTracker().Record(&trace.Event{
+		Source:     "Gateway",
+		Target:     "Chat Service",
+		Protocol:   "gRPC",
+		Type:       "Streaming",
+		Message:    msgText,
+		Status:     statusVal,
+		DurationMs: duration,
+	})
+
+	if err != nil {
+		return "", err
+	}
+	return resp.GetFilePath(), nil
+}
+

@@ -857,6 +857,102 @@ func (x *GetRoomMembersResponse) GetMembers() []*RoomMember {
 	return nil
 }
 
+type UploadFileChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Chunk         []byte                 `protobuf:"bytes,1,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadFileChunk) Reset() {
+	*x = UploadFileChunk{}
+	mi := &file_proto_chat_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadFileChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadFileChunk) ProtoMessage() {}
+
+func (x *UploadFileChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_chat_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadFileChunk.ProtoReflect.Descriptor instead.
+func (*UploadFileChunk) Descriptor() ([]byte, []int) {
+	return file_proto_chat_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UploadFileChunk) GetChunk() []byte {
+	if x != nil {
+		return x.Chunk
+	}
+	return nil
+}
+
+func (x *UploadFileChunk) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+type UploadFileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FilePath      string                 `protobuf:"bytes,1,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadFileResponse) Reset() {
+	*x = UploadFileResponse{}
+	mi := &file_proto_chat_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadFileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadFileResponse) ProtoMessage() {}
+
+func (x *UploadFileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_chat_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadFileResponse.ProtoReflect.Descriptor instead.
+func (*UploadFileResponse) Descriptor() ([]byte, []int) {
+	return file_proto_chat_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UploadFileResponse) GetFilePath() string {
+	if x != nil {
+		return x.FilePath
+	}
+	return ""
+}
+
 var File_proto_chat_proto protoreflect.FileDescriptor
 
 const file_proto_chat_proto_rawDesc = "" +
@@ -916,7 +1012,12 @@ const file_proto_chat_proto_rawDesc = "" +
 	"\x15GetRoomMembersRequest\x12\x17\n" +
 	"\aroom_id\x18\x01 \x01(\tR\x06roomId\"D\n" +
 	"\x16GetRoomMembersResponse\x12*\n" +
-	"\amembers\x18\x01 \x03(\v2\x10.chat.RoomMemberR\amembers*!\n" +
+	"\amembers\x18\x01 \x03(\v2\x10.chat.RoomMemberR\amembers\"C\n" +
+	"\x0fUploadFileChunk\x12\x14\n" +
+	"\x05chunk\x18\x01 \x01(\fR\x05chunk\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"1\n" +
+	"\x12UploadFileResponse\x12\x1b\n" +
+	"\tfile_path\x18\x01 \x01(\tR\bfilePath*!\n" +
 	"\bRoomType\x12\n" +
 	"\n" +
 	"\x06DIRECT\x10\x00\x12\t\n" +
@@ -925,14 +1026,16 @@ const file_proto_chat_proto_rawDesc = "" +
 	"\x04TEXT\x10\x00\x12\t\n" +
 	"\x05IMAGE\x10\x01\x12\n" +
 	"\n" +
-	"\x06SYSTEM\x10\x022\xde\x02\n" +
+	"\x06SYSTEM\x10\x022\x9f\x03\n" +
 	"\vChatService\x12?\n" +
 	"\n" +
 	"CreateRoom\x12\x17.chat.CreateRoomRequest\x1a\x18.chat.CreateRoomResponse\x129\n" +
 	"\bGetRooms\x12\x15.chat.GetRoomsRequest\x1a\x16.chat.GetRoomsResponse\x12B\n" +
 	"\vSendMessage\x12\x18.chat.SendMessageRequest\x1a\x19.chat.SendMessageResponse\x12B\n" +
 	"\vGetMessages\x12\x18.chat.GetMessagesRequest\x1a\x19.chat.GetMessagesResponse\x12K\n" +
-	"\x0eGetRoomMembers\x12\x1b.chat.GetRoomMembersRequest\x1a\x1c.chat.GetRoomMembersResponseB\x0fZ\rgen/chat;chatb\x06proto3"
+	"\x0eGetRoomMembers\x12\x1b.chat.GetRoomMembersRequest\x1a\x1c.chat.GetRoomMembersResponse\x12?\n" +
+	"\n" +
+	"UploadFile\x12\x15.chat.UploadFileChunk\x1a\x18.chat.UploadFileResponse(\x01B\x0fZ\rgen/chat;chatb\x06proto3"
 
 var (
 	file_proto_chat_proto_rawDescOnce sync.Once
@@ -947,7 +1050,7 @@ func file_proto_chat_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_proto_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_chat_proto_goTypes = []any{
 	(RoomType)(0),                  // 0: chat.RoomType
 	(MessageType)(0),               // 1: chat.MessageType
@@ -964,20 +1067,22 @@ var file_proto_chat_proto_goTypes = []any{
 	(*GetMessagesResponse)(nil),    // 12: chat.GetMessagesResponse
 	(*GetRoomMembersRequest)(nil),  // 13: chat.GetRoomMembersRequest
 	(*GetRoomMembersResponse)(nil), // 14: chat.GetRoomMembersResponse
-	(*timestamppb.Timestamp)(nil),  // 15: google.protobuf.Timestamp
+	(*UploadFileChunk)(nil),        // 15: chat.UploadFileChunk
+	(*UploadFileResponse)(nil),     // 16: chat.UploadFileResponse
+	(*timestamppb.Timestamp)(nil),  // 17: google.protobuf.Timestamp
 }
 var file_proto_chat_proto_depIdxs = []int32{
 	0,  // 0: chat.Room.room_type:type_name -> chat.RoomType
-	15, // 1: chat.Room.created_at:type_name -> google.protobuf.Timestamp
+	17, // 1: chat.Room.created_at:type_name -> google.protobuf.Timestamp
 	1,  // 2: chat.Message.message_type:type_name -> chat.MessageType
-	15, // 3: chat.Message.created_at:type_name -> google.protobuf.Timestamp
-	15, // 4: chat.RoomMember.joined_at:type_name -> google.protobuf.Timestamp
+	17, // 3: chat.Message.created_at:type_name -> google.protobuf.Timestamp
+	17, // 4: chat.RoomMember.joined_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: chat.CreateRoomRequest.room_type:type_name -> chat.RoomType
 	2,  // 6: chat.CreateRoomResponse.room:type_name -> chat.Room
 	2,  // 7: chat.GetRoomsResponse.rooms:type_name -> chat.Room
 	1,  // 8: chat.SendMessageRequest.message_type:type_name -> chat.MessageType
 	3,  // 9: chat.SendMessageResponse.message:type_name -> chat.Message
-	15, // 10: chat.GetMessagesRequest.before_timestamp:type_name -> google.protobuf.Timestamp
+	17, // 10: chat.GetMessagesRequest.before_timestamp:type_name -> google.protobuf.Timestamp
 	3,  // 11: chat.GetMessagesResponse.messages:type_name -> chat.Message
 	4,  // 12: chat.GetRoomMembersResponse.members:type_name -> chat.RoomMember
 	5,  // 13: chat.ChatService.CreateRoom:input_type -> chat.CreateRoomRequest
@@ -985,13 +1090,15 @@ var file_proto_chat_proto_depIdxs = []int32{
 	9,  // 15: chat.ChatService.SendMessage:input_type -> chat.SendMessageRequest
 	11, // 16: chat.ChatService.GetMessages:input_type -> chat.GetMessagesRequest
 	13, // 17: chat.ChatService.GetRoomMembers:input_type -> chat.GetRoomMembersRequest
-	6,  // 18: chat.ChatService.CreateRoom:output_type -> chat.CreateRoomResponse
-	8,  // 19: chat.ChatService.GetRooms:output_type -> chat.GetRoomsResponse
-	10, // 20: chat.ChatService.SendMessage:output_type -> chat.SendMessageResponse
-	12, // 21: chat.ChatService.GetMessages:output_type -> chat.GetMessagesResponse
-	14, // 22: chat.ChatService.GetRoomMembers:output_type -> chat.GetRoomMembersResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
+	15, // 18: chat.ChatService.UploadFile:input_type -> chat.UploadFileChunk
+	6,  // 19: chat.ChatService.CreateRoom:output_type -> chat.CreateRoomResponse
+	8,  // 20: chat.ChatService.GetRooms:output_type -> chat.GetRoomsResponse
+	10, // 21: chat.ChatService.SendMessage:output_type -> chat.SendMessageResponse
+	12, // 22: chat.ChatService.GetMessages:output_type -> chat.GetMessagesResponse
+	14, // 23: chat.ChatService.GetRoomMembers:output_type -> chat.GetRoomMembersResponse
+	16, // 24: chat.ChatService.UploadFile:output_type -> chat.UploadFileResponse
+	19, // [19:25] is the sub-list for method output_type
+	13, // [13:19] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -1008,7 +1115,7 @@ func file_proto_chat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_chat_proto_rawDesc), len(file_proto_chat_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

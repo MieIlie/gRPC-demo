@@ -35,16 +35,8 @@ func main() {
 	}
 	defer chatClient.Close()
 
-	// Initialize gRPC Client to Call Service
-	callClient, err := grpc.NewCallClient(cfg.CallServiceAddr)
-	if err != nil {
-		logger.Error("Failed to initialize Call Service client: %v", err)
-		os.Exit(1)
-	}
-	defer callClient.Close()
-
 	wsManager := websocket.NewManager()
-	router := server.NewRouter(cfg, wsManager, authClient, chatClient, callClient)
+	router := server.NewRouter(cfg, wsManager, authClient, chatClient)
 
 	srv := &http.Server{
 		Addr:    cfg.Port,

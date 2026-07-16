@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"gen/chat"
 	"chat-service/internal/db"
+	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -243,3 +247,69 @@ func (s *ChatServer) GetRoomMembers(ctx context.Context, req *chat.GetRoomMember
 
 	return &chat.GetRoomMembersResponse{Members: protoMembers}, nil
 }
+
+func (s *ChatServer) UploadFile(stream chat.ChatService_UploadFileServer) error {
+	var file *os.File
+	var filename string
+	var totalBytes int64
+
+	defer func() {
+		if file != nil {
+			file.Close()
+		}
+	}()
+
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to receive chunk: %v", err)
+		}
+
+		if file == nil {
+			filename = chunk.GetFilename()
+			if filename == "" {
+				return status.Error(codes.InvalidArgument, "filename is required in first chunk")
+			}
+
+			// Sanitize filename to avoid directory traversal
+			filename = filepath.Base(filename)
+			// Ensure unique filename
+			filename = fmt.Sprintf("%d-%s", time.Now().UnixNano(), filename)
+
+			uploadDir := "/app/uploads"
+			if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
+				return status.Errorf(codes.Internal, "failed to create upload directory: %v", err)
+			}
+
+			filePath := filepath.Join(uploadDir, filename)
+			file, err = os.Create(filePath)
+			if err != nil {
+				return status.Errorf(codes.Internal, "failed to create file: %v", err)
+			}
+		}
+
+		n, err := file.Write(chunk.GetChunk())
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to write chunk: %v", err)
+		}
+		totalBytes += int64(n)
+	}
+
+	if file != nil {
+		file.Close()
+		file = nil
+	}
+
+	if totalBytes == 0 {
+		return status.Error(codes.InvalidArgument, "uploaded file is empty")
+	}
+
+	fileURL := fmt.Sprintf("/uploads/%s", filename)
+	return stream.SendAndClose(&chat.UploadFileResponse{
+		FilePath: fileURL,
+	})
+}
+

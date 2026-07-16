@@ -9,13 +9,13 @@ import (
 )
 
 type Manager struct {
-	mu      sync.RWMutex
-	clients map[string]map[*Client]bool
+	mu           sync.RWMutex
+	clients      map[string]map[*Client]bool
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		clients: make(map[string]map[*Client]bool),
+		clients:      make(map[string]map[*Client]bool),
 	}
 }
 

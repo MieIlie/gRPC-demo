@@ -94,6 +94,13 @@ export function sendWSMessage(event, data) {
 function handleWSMessage(msg) {
     const listeners = socketEventListeners[msg.event] || [];
     listeners.forEach(cb => cb(msg.data));
+
+    // Guaranteed fallback for WebRTC signaling messages.
+    // The normal listener mechanism can silently fail (e.g. registration race).
+    // This direct window hook ensures offer/answer/ICE are never dropped.
+    if (msg.event && msg.event.startsWith('webrtc.') && typeof window.__rtcDirectHandler === 'function') {
+        window.__rtcDirectHandler(msg.event, msg.data);
+    }
 }
 
 const socketEventListeners = {};

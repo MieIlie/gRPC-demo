@@ -23,6 +23,7 @@ service ChatService {
     rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
     rpc GetMessages (GetMessagesRequest) returns (GetMessagesResponse);
     rpc GetRoomMembers (GetRoomMembersRequest) returns (GetRoomMembersResponse);
+    rpc UploadFile (stream UploadFileChunk) returns (UploadFileResponse);
 }
 
 message Room {
@@ -96,4 +97,13 @@ message GetRoomMembersRequest {
 
 message GetRoomMembersResponse {
     repeated RoomMember members = 1;
+}
+
+message UploadFileChunk {
+    bytes chunk = 1;
+    string filename = 2;
+}
+
+message UploadFileResponse {
+    string file_path = 1;
 }

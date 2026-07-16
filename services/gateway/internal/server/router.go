@@ -3,10 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -26,18 +23,16 @@ type Router struct {
 	wsRouter   *websocket.Router
 	authClient *grpc.AuthClient
 	chatClient *grpc.ChatClient
-	callClient *grpc.CallClient
 	mux        *http.ServeMux
 }
 
-func NewRouter(cfg *config.Config, wsMgr *websocket.Manager, authCli *grpc.AuthClient, chatCli *grpc.ChatClient, callCli *grpc.CallClient) *Router {
+func NewRouter(cfg *config.Config, wsMgr *websocket.Manager, authCli *grpc.AuthClient, chatCli *grpc.ChatClient) *Router {
 	r := &Router{
 		config:     cfg,
 		wsManager:  wsMgr,
-		wsRouter:   websocket.NewRouter(wsMgr, chatCli, callCli),
+		wsRouter:   websocket.NewRouter(wsMgr, chatCli),
 		authClient: authCli,
 		chatClient: chatCli,
-		callClient: callCli,
 		mux:        http.NewServeMux(),
 	}
 	r.registerRoutes()
@@ -301,29 +296,12 @@ func (r *Router) registerRoutes() {
 		}
 		defer file.Close()
 
-		uploadsDir := "./frontend/uploads"
-		if err := os.MkdirAll(uploadsDir, os.ModePerm); err != nil {
-			http.Error(w, "Failed to create uploads directory", http.StatusInternalServerError)
-			return
-		}
-
-		filename := fmt.Sprintf("%d-%s", time.Now().UnixNano(), header.Filename)
-		filePath := filepath.Join(uploadsDir, filename)
-
-		out, err := os.Create(filePath)
+		fileURL, err := r.chatClient.UploadFile(req.Context(), header.Filename, file)
 		if err != nil {
-			http.Error(w, "Failed to save file", http.StatusInternalServerError)
-			return
-		}
-		defer out.Close()
-
-		_, err = io.Copy(out, file)
-		if err != nil {
-			http.Error(w, "Failed to write file to disk", http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to upload file via gRPC: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		fileURL := fmt.Sprintf("/uploads/%s", filename)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"url": fileURL,

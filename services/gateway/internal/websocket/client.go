@@ -78,21 +78,21 @@ func (c *Client) WritePump() {
 				return
 			}
 
-			w, err := c.Conn.NextWriter(websocket.TextMessage)
-			if err != nil {
+			// Send this message as its own WebSocket frame.
+			// IMPORTANT: do NOT batch multiple messages into one frame (the old
+			// NextWriter + flush-queued approach). Batching concatenates JSON
+			// objects with '\n', which makes JSON.parse fail on the frontend.
+			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
-			_, _ = w.Write(message)
 
-			// Flush any other queued messages in the channel
+			// Drain any other queued messages, each as a separate frame.
 			n := len(c.Send)
 			for i := 0; i < n; i++ {
-				_, _ = w.Write([]byte{'\n'})
-				_, _ = w.Write(<-c.Send)
-			}
-
-			if err := w.Close(); err != nil {
-				return
+				_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := c.Conn.WriteMessage(websocket.TextMessage, <-c.Send); err != nil {
+					return
+				}
 			}
 		case <-ticker.C:
 			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))

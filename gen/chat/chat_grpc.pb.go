@@ -24,6 +24,7 @@ const (
 	ChatService_SendMessage_FullMethodName    = "/chat.ChatService/SendMessage"
 	ChatService_GetMessages_FullMethodName    = "/chat.ChatService/GetMessages"
 	ChatService_GetRoomMembers_FullMethodName = "/chat.ChatService/GetRoomMembers"
+	ChatService_UploadFile_FullMethodName     = "/chat.ChatService/UploadFile"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -35,6 +36,7 @@ type ChatServiceClient interface {
 	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
 	GetMessages(ctx context.Context, in *GetMessagesRequest, opts ...grpc.CallOption) (*GetMessagesResponse, error)
 	GetRoomMembers(ctx context.Context, in *GetRoomMembersRequest, opts ...grpc.CallOption) (*GetRoomMembersResponse, error)
+	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileChunk, UploadFileResponse], error)
 }
 
 type chatServiceClient struct {
@@ -95,6 +97,19 @@ func (c *chatServiceClient) GetRoomMembers(ctx context.Context, in *GetRoomMembe
 	return out, nil
 }
 
+func (c *chatServiceClient) UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileChunk, UploadFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[0], ChatService_UploadFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[UploadFileChunk, UploadFileResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ChatService_UploadFileClient = grpc.ClientStreamingClient[UploadFileChunk, UploadFileResponse]
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
@@ -104,6 +119,7 @@ type ChatServiceServer interface {
 	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
 	GetMessages(context.Context, *GetMessagesRequest) (*GetMessagesResponse, error)
 	GetRoomMembers(context.Context, *GetRoomMembersRequest) (*GetRoomMembersResponse, error)
+	UploadFile(grpc.ClientStreamingServer[UploadFileChunk, UploadFileResponse]) error
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -128,6 +144,9 @@ func (UnimplementedChatServiceServer) GetMessages(context.Context, *GetMessagesR
 }
 func (UnimplementedChatServiceServer) GetRoomMembers(context.Context, *GetRoomMembersRequest) (*GetRoomMembersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetRoomMembers not implemented")
+}
+func (UnimplementedChatServiceServer) UploadFile(grpc.ClientStreamingServer[UploadFileChunk, UploadFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method UploadFile not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 func (UnimplementedChatServiceServer) testEmbeddedByValue()                     {}
@@ -240,6 +259,13 @@ func _ChatService_GetRoomMembers_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_UploadFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ChatServiceServer).UploadFile(&grpc.GenericServerStream[UploadFileChunk, UploadFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ChatService_UploadFileServer = grpc.ClientStreamingServer[UploadFileChunk, UploadFileResponse]
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -268,6 +294,12 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ChatService_GetRoomMembers_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "UploadFile",
+			Handler:       _ChatService_UploadFile_Handler,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "proto/chat.proto",
 }
