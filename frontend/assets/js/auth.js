@@ -57,6 +57,8 @@ function setupAuthListeners() {
     const titleText = getElement('auth-title-text');
     const submitBtn = getElement('auth-submit-btn');
     const displayNameGroup = getElement('display-name-group');
+    const confirmPasswordGroup = getElement('confirm-password-group');
+    const confirmPasswordInput = getElement('confirm-password-input');
 
     let isRegisterMode = false;
 
@@ -92,12 +94,16 @@ function setupAuthListeners() {
             switchText.textContent = "Already have an account?";
             switchLink.textContent = "Login";
             displayNameGroup.style.display = "block";
+            confirmPasswordGroup.style.display = "block";
+            confirmPasswordInput.required = true;
         } else {
             titleText.textContent = "Welcome Back";
             submitBtn.textContent = "Login";
             switchText.textContent = "Don't have an account?";
             switchLink.textContent = "Register";
             displayNameGroup.style.display = "none";
+            confirmPasswordGroup.style.display = "none";
+            confirmPasswordInput.required = false;
         }
     });
 
@@ -110,6 +116,11 @@ function setupAuthListeners() {
         let body = { username, password };
 
         if (isRegisterMode) {
+            const confirmPassword = confirmPasswordInput.value.trim();
+            if (password !== confirmPassword) {
+                alert("Passwords do not match!");
+                return;
+            }
             url = '/api/auth/register';
             body.display_name = getElement('display-name-input').value.trim();
         }

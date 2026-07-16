@@ -250,6 +250,43 @@ function setupChatListeners() {
         });
     }
 
+    // Mobile menu toggle implementation
+    const menuBtn = getElement('mobile-menu-btn');
+    const sidebar = document.querySelector('.sidebar');
+    
+    // Add overlay to body if not present
+    let overlay = document.querySelector('.sidebar-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'sidebar-overlay';
+        document.body.appendChild(overlay);
+    }
+    
+    if (menuBtn) {
+        // Clone to remove old listeners
+        const newMenuBtn = menuBtn.cloneNode(true);
+        menuBtn.parentNode.replaceChild(newMenuBtn, menuBtn);
+        newMenuBtn.style.display = window.innerWidth <= 768 ? 'block' : 'none';
+        
+        newMenuBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('active');
+        });
+        
+        window.addEventListener('resize', () => {
+            newMenuBtn.style.display = window.innerWidth <= 768 ? 'block' : 'none';
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('active');
+            }
+        });
+    }
+    
+    overlay.addEventListener('click', () => {
+        sidebar.classList.remove('mobile-open');
+        overlay.classList.remove('active');
+    });
+
     renderRooms();
 }
 
@@ -273,6 +310,13 @@ function renderRooms() {
             store.setState({ activeRoom: room });
             renderRooms();
             fetchRoomMessages(room.id);
+            
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.querySelector('.sidebar-overlay');
+            if (sidebar && overlay) {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('active');
+            }
         });
         listEl.appendChild(item);
     });

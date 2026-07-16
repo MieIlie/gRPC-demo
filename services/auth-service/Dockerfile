@@ -8,7 +8,6 @@ COPY gen/go.mod gen/
 COPY services/gateway/go.mod services/gateway/
 COPY services/auth-service/go.mod services/auth-service/
 COPY services/chat-service/go.mod services/chat-service/
-COPY services/call-service/go.mod services/call-service/
 
 RUN go work sync || true
 
