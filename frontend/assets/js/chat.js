@@ -855,15 +855,28 @@ async function spawnBot() {
             // Set up sending loop
             messageInterval = setInterval(() => {
                 if (wsConn.readyState === WebSocket.OPEN) {
+                    // Send typing indicator first
                     wsConn.send(JSON.stringify({
-                        event: 'chat.send',
-                        data: JSON.stringify({
-                            roomId: 'a3333333-3333-3333-3333-333333333333', // General Room only
-                            content: getRandomBotMessage()
-                        })
+                        event: 'chat.typing',
+                        data: {
+                            roomId: 'a3333333-3333-3333-3333-333333333333'
+                        }
                     }));
+
+                    // Send the actual message 1.2 seconds later
+                    setTimeout(() => {
+                        if (wsConn.readyState === WebSocket.OPEN) {
+                            wsConn.send(JSON.stringify({
+                                event: 'chat.send',
+                                data: {
+                                    roomId: 'a3333333-3333-3333-3333-333333333333', // General Room only
+                                    content: getRandomBotMessage()
+                                }
+                            }));
+                        }
+                    }, 1200);
                 }
-            }, 2000 + Math.random() * 1500); // randomize send intervals slightly (2-3.5 seconds)
+            }, 3500 + Math.random() * 2000); // 3.5s - 5.5s intervals
         };
 
         wsConn.onerror = (err) => {
